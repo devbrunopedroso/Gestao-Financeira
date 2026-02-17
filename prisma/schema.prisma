@@ -1,0 +1,305 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Usuários do sistema (autenticação Google)
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  image         String?
+  emailVerified DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // NextAuth
+  accounts Account[]
+  sessions Session[]
+
+  // Relacionamentos
+  accountMemberships AccountMember[]
+  createdAccounts    FinancialAccount[] @relation("AccountCreator")
+
+  @@map("users")
+}
+
+// NextAuth - Account
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+// NextAuth - Session
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// NextAuth - VerificationToken
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// Conta Financeira
+model FinancialAccount {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relacionamentos
+  creatorId        String
+  creator          User                @relation("AccountCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  members          AccountMember[]
+  fixedIncomes     FixedIncome[]
+  extraIncomes     ExtraIncome[]
+  fixedExpenses    FixedExpense[]
+  variableExpenses VariableExpense[]
+  categories       Category[]
+  piggyBanks       PiggyBank[]
+  invitations      AccountInvitation[]
+
+  @@map("financial_accounts")
+}
+
+// Membros da conta (permissões)
+model AccountMember {
+  id        String      @id @default(cuid())
+  role      AccountRole @default(VIEWER)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  // Relacionamentos
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId String
+  account   FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, accountId])
+  @@map("account_members")
+}
+
+enum AccountRole {
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+// Convites para conta
+model AccountInvitation {
+  id        String      @id @default(cuid())
+  email     String
+  role      AccountRole @default(VIEWER)
+  token     String      @unique
+  expiresAt DateTime
+  accepted  Boolean     @default(false)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  // Relacionamentos
+  accountId String
+  account   FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("account_invitations")
+}
+
+// Renda Fixa
+model FixedIncome {
+  id          String   @id @default(cuid())
+  amount      Decimal  @db.Decimal(10, 2)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relacionamentos
+  accountId String
+  account   FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("fixed_incomes")
+}
+
+// Renda Extra
+model ExtraIncome {
+  id          String   @id @default(cuid())
+  amount      Decimal  @db.Decimal(10, 2)
+  description String?
+  month       Int
+  year        Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relacionamentos
+  accountId String
+  account   FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("extra_incomes")
+}
+
+// Despesa Fixa
+model FixedExpense {
+  id          String    @id @default(cuid())
+  amount      Decimal   @db.Decimal(10, 2)
+  description String
+  startDate   DateTime
+  endDate     DateTime? // null = sem prazo
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relacionamentos
+  accountId  String
+  account    FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  categoryId String?
+  category   Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@map("fixed_expenses")
+}
+
+// Despesa Variável
+model VariableExpense {
+  id          String   @id @default(cuid())
+  amount      Decimal  @db.Decimal(10, 2)
+  description String?
+  date        DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relacionamentos
+  accountId  String
+  account    FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  categoryId String?
+  category   Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@map("variable_expenses")
+}
+
+// Categoria
+model Category {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  isDefault   Boolean  @default(false)
+  color       String? // hex color
+  icon        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relacionamentos
+  accountId        String?
+  account          FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  fixedExpenses    FixedExpense[]
+  variableExpenses VariableExpense[]
+
+  @@map("categories")
+}
+
+// Caixinha / Propósito
+model PiggyBank {
+  id            String    @id @default(cuid())
+  name          String
+  description   String?
+  targetAmount  Decimal   @db.Decimal(10, 2)
+  currentAmount Decimal   @default(0) @db.Decimal(10, 2)
+  startDate     DateTime  @default(now())
+  endDate              DateTime? // pode ser definido por meses ou data
+  months               Int? // duração em meses (alternativa ao endDate)
+  monthlyContribution  Decimal?  @db.Decimal(10, 2) // valor mensal que conta como despesa fixa
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  // Relacionamentos
+  accountId     String
+  account       FinancialAccount       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  transactions  PiggyBankTransaction[]
+  sharedWith    PiggyBankShare[]
+  skippedMonths PiggyBankSkippedMonth[]
+
+  @@map("piggy_banks")
+}
+
+// Transações da Caixinha (aportes e retiradas)
+model PiggyBankTransaction {
+  id          String          @id @default(cuid())
+  amount      Decimal         @db.Decimal(10, 2)
+  type        TransactionType
+  description String?
+  date        DateTime        @default(now())
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  // Relacionamentos
+  piggyBankId String
+  piggyBank   PiggyBank @relation(fields: [piggyBankId], references: [id], onDelete: Cascade)
+
+  @@map("piggy_bank_transactions")
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+}
+
+// Compartilhamento de Caixinha
+model PiggyBankShare {
+  id        String      @id @default(cuid())
+  email     String
+  role      AccountRole @default(VIEWER)
+  token     String      @unique
+  expiresAt DateTime?
+  accepted  Boolean     @default(false)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  // Relacionamentos
+  piggyBankId String
+  piggyBank   PiggyBank @relation(fields: [piggyBankId], references: [id], onDelete: Cascade)
+
+  @@map("piggy_bank_shares")
+}
+
+// Meses pulados da caixinha (quando o usuario nao contribuiu naquele mes)
+model PiggyBankSkippedMonth {
+  id          String   @id @default(cuid())
+  month       Int
+  year        Int
+  createdAt   DateTime @default(now())
+
+  // Relacionamentos
+  piggyBankId String
+  piggyBank   PiggyBank @relation(fields: [piggyBankId], references: [id], onDelete: Cascade)
+
+  @@unique([piggyBankId, month, year])
+  @@map("piggy_bank_skipped_months")
+}
