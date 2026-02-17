@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { NativeSelect } from '@/components/ui/select-native'
 import { Skeleton } from '@/components/ui/skeleton'
 
+const STORAGE_KEY = 'selectedAccountId'
+
 interface Account {
   id: string
   name: string
@@ -30,7 +32,9 @@ export function AccountSelector({ value, onChange, className = '' }: AccountSele
         const data = await response.json()
         setAccounts(data)
         if (data.length > 0 && !value) {
-          onChange(data[0].id)
+          const saved = localStorage.getItem(STORAGE_KEY)
+          const savedExists = saved && data.some((a: Account) => a.id === saved)
+          onChange(savedExists ? saved : data[0].id)
         }
       }
     } catch (error) {
@@ -38,6 +42,11 @@ export function AccountSelector({ value, onChange, className = '' }: AccountSele
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleChange = (accountId: string) => {
+    localStorage.setItem(STORAGE_KEY, accountId)
+    onChange(accountId)
   }
 
   if (loading) {
@@ -55,7 +64,7 @@ export function AccountSelector({ value, onChange, className = '' }: AccountSele
   return (
     <NativeSelect
       value={value || ''}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) => handleChange(e.target.value)}
       className={className}
     >
       {accounts.map((account) => (

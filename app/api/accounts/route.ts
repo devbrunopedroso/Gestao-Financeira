@@ -85,7 +85,10 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    const accounts = memberships.map((membership) => membership.account)
+    const accounts = memberships.map((membership) => ({
+      ...membership.account,
+      myRole: membership.role,
+    }))
 
     return NextResponse.json(accounts)
   } catch (error) {

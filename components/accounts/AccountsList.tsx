@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSession } from 'next-auth/react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,16 +14,19 @@ import {
 } from '@/components/ui/dialog'
 import { formatCurrency } from '@/lib/helpers'
 import Link from 'next/link'
-import { Plus, Users, Wallet, UserPlus, Mail } from 'lucide-react'
+import { Plus, Users, Wallet, UserPlus, Mail, LogOut } from 'lucide-react'
 
 interface Account {
   id: string
   name: string
+  creatorId: string
   createdAt: string
-  members: Array<{ role: string; user: { name: string; email: string } }>
+  myRole: string
+  members: Array<{ role: string; user: { id: string; name: string; email: string } }>
 }
 
 export function AccountsList() {
+  const { data: session } = useSession()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -37,6 +41,11 @@ export function AccountsList() {
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState('VIEWER')
   const [inviting, setInviting] = useState(false)
+
+  // Leave modal
+  const [leaveOpen, setLeaveOpen] = useState(false)
+  const [leaveAccount, setLeaveAccount] = useState<Account | null>(null)
+  const [leaving, setLeaving] = useState(false)
 
   useEffect(() => { fetchAccounts() }, [])
 
@@ -101,6 +110,33 @@ export function AccountsList() {
     setInviteOpen(true)
   }
 
+  const openLeave = (account: Account) => {
+    setLeaveAccount(account)
+    setLeaveOpen(true)
+  }
+
+  const handleLeave = async () => {
+    if (!leaveAccount) return
+    setLeaving(true)
+    try {
+      const res = await fetch(`/api/accounts/${leaveAccount.id}/leave`, {
+        method: 'POST',
+      })
+      if (res.ok) {
+        setLeaveOpen(false)
+        setLeaveAccount(null)
+        fetchAccounts()
+      } else {
+        const data = await res.json()
+        alert(data.message || 'Erro ao sair da conta')
+      }
+    } catch (error) {
+      console.error('Erro:', error)
+    } finally {
+      setLeaving(false)
+    }
+  }
+
   const roleLabels: Record<string, string> = {
     ADMIN: 'Admin',
     EDITOR: 'Editor',
@@ -146,9 +182,18 @@ export function AccountsList() {
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-lg">{account.name}</CardTitle>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openInvite(account.id)}>
-                    <UserPlus className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    {account.myRole === 'ADMIN' && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openInvite(account.id)}>
+                        <UserPlus className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {account.creatorId !== session?.user?.id && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => openLeave(account)}>
+                        <LogOut className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -224,6 +269,25 @@ export function AccountsList() {
             <Button variant="outline" onClick={() => setInviteOpen(false)}>Cancelar</Button>
             <Button onClick={handleInvite} disabled={inviting || !inviteEmail}>
               {inviting ? 'Enviando...' : 'Enviar Convite'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Leave Account Modal */}
+      <Dialog open={leaveOpen} onOpenChange={setLeaveOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Sair da Conta</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja sair da conta <strong>{leaveAccount?.name}</strong>?
+              Voce perdera o acesso a todos os dados desta conta.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLeaveOpen(false)}>Cancelar</Button>
+            <Button variant="destructive" onClick={handleLeave} disabled={leaving}>
+              {leaving ? 'Saindo...' : 'Sair da Conta'}
             </Button>
           </DialogFooter>
         </DialogContent>

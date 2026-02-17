@@ -12,6 +12,45 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
+    async signIn({ user }) {
+      // Auto-accept pending invitations for this email
+      if (user.id && user.email) {
+        try {
+          const pendingInvitations = await prisma.accountInvitation.findMany({
+            where: {
+              email: user.email,
+              accepted: false,
+              expiresAt: { gte: new Date() },
+            },
+          })
+          for (const invitation of pendingInvitations) {
+            const existing = await prisma.accountMember.findUnique({
+              where: {
+                userId_accountId: { userId: user.id, accountId: invitation.accountId },
+              },
+            })
+            if (!existing) {
+              await prisma.$transaction([
+                prisma.accountMember.create({
+                  data: {
+                    userId: user.id,
+                    accountId: invitation.accountId,
+                    role: invitation.role,
+                  },
+                }),
+                prisma.accountInvitation.update({
+                  where: { id: invitation.id },
+                  data: { accepted: true },
+                }),
+              ])
+            }
+          }
+        } catch (error) {
+          console.error('Erro ao auto-aceitar convites:', error)
+        }
+      }
+      return true
+    },
     async session({ session, user }) {
       if (session.user) {
         session.user.id = user.id
