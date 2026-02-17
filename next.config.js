@@ -9,6 +9,9 @@ const withPWA = require('@ducanh2912/next-pwa').default({
 const nextConfig = {
   reactStrictMode: true,
   serverExternalPackages: ['pdf-parse', 'pdfjs-dist'],
+  outputFileTracingIncludes: {
+    '/api/invoices/parse': ['./node_modules/pdfjs-dist/**/*'],
+  },
 }
 
 module.exports = withPWA(nextConfig)
