@@ -13,7 +13,7 @@ import { calculateMonthlyAmount, monthsBetween } from '@/lib/helpers'
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -22,8 +22,10 @@ export async function GET(
       return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
     }
 
+    const { id } = await params
+
     const piggyBank = await prisma.piggyBank.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         transactions: {
           orderBy: { date: 'desc' },
@@ -108,7 +110,7 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -117,11 +119,12 @@ export async function PUT(
       return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
     }
 
+    const { id } = await params
     const body = await request.json()
     const validatedData = await piggyBankSchema.validate(body)
 
     const piggyBank = await prisma.piggyBank.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!piggyBank) {
@@ -148,7 +151,7 @@ export async function PUT(
     }
 
     const updated = await prisma.piggyBank.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         name: validatedData.name,
         description: validatedData.description || null,
@@ -207,7 +210,7 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -216,8 +219,10 @@ export async function DELETE(
       return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
     }
 
+    const { id } = await params
+
     const piggyBank = await prisma.piggyBank.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!piggyBank) {
@@ -244,7 +249,7 @@ export async function DELETE(
     }
 
     await prisma.piggyBank.delete({
-      where: { id: params.id },
+      where: { id },
     })
 
     return NextResponse.json({ message: 'Caixinha excluída com sucesso' })
@@ -256,7 +261,3 @@ export async function DELETE(
     )
   }
 }
-
-
-
-

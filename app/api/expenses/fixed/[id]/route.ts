@@ -12,7 +12,7 @@ import { canEdit } from '@/lib/permissions'
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -21,11 +21,12 @@ export async function PUT(
       return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
     }
 
+    const { id } = await params
     const body = await request.json()
     const validatedData = await fixedExpenseSchema.validate(body)
 
     const fixedExpense = await prisma.fixedExpense.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!fixedExpense) {
@@ -52,7 +53,7 @@ export async function PUT(
     }
 
     const updated = await prisma.fixedExpense.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         amount: validatedData.amount,
         description: validatedData.description,
@@ -87,7 +88,7 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -96,8 +97,10 @@ export async function DELETE(
       return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
     }
 
+    const { id } = await params
+
     const fixedExpense = await prisma.fixedExpense.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!fixedExpense) {
@@ -124,7 +127,7 @@ export async function DELETE(
     }
 
     await prisma.fixedExpense.delete({
-      where: { id: params.id },
+      where: { id },
     })
 
     return NextResponse.json({ message: 'Despesa fixa excluída com sucesso' })
@@ -136,7 +139,3 @@ export async function DELETE(
     )
   }
 }
-
-
-
-

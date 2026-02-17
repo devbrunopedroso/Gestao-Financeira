@@ -11,7 +11,7 @@ import { canEdit } from '@/lib/permissions'
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -20,11 +20,12 @@ export async function PUT(
       return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
     }
 
+    const { id } = await params
     const body = await request.json()
     const validatedData = await categorySchema.validate(body)
 
     const category = await prisma.category.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!category) {
@@ -59,7 +60,7 @@ export async function PUT(
     }
 
     const updated = await prisma.category.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         name: validatedData.name,
         description: validatedData.description || null,
@@ -92,7 +93,7 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -101,8 +102,10 @@ export async function DELETE(
       return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
     }
 
+    const { id } = await params
+
     const category = await prisma.category.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!category) {
@@ -136,7 +139,7 @@ export async function DELETE(
     }
 
     await prisma.category.delete({
-      where: { id: params.id },
+      where: { id },
     })
 
     return NextResponse.json({ message: 'Categoria excluída com sucesso' })
@@ -148,7 +151,3 @@ export async function DELETE(
     )
   }
 }
-
-
-
-

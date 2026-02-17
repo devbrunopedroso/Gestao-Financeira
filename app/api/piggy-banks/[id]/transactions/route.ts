@@ -15,7 +15,7 @@ import { calculateMonthlyAmount, monthsBetween } from '@/lib/helpers'
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -24,12 +24,13 @@ export async function POST(
       return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
     }
 
+    const { id } = await params
     const body = await request.json()
     const validatedData = await piggyBankTransactionSchema.validate(body)
 
     // Buscar caixinha para verificar permissões
     const piggyBank = await prisma.piggyBank.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!piggyBank) {
@@ -70,7 +71,7 @@ export async function POST(
     const [transaction, updatedPiggyBank] = await prisma.$transaction([
       prisma.piggyBankTransaction.create({
         data: {
-          piggyBankId: params.id,
+          piggyBankId: id,
           amount: validatedData.amount,
           type: validatedData.type,
           description: validatedData.description || null,
@@ -78,7 +79,7 @@ export async function POST(
         },
       }),
       prisma.piggyBank.update({
-        where: { id: params.id },
+        where: { id },
         data: {
           currentAmount: newCurrentAmount,
         },
@@ -142,7 +143,3 @@ export async function POST(
     )
   }
 }
-
-
-
-

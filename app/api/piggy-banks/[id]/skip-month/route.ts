@@ -10,7 +10,7 @@ import { canEdit } from '@/lib/permissions'
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -18,12 +18,13 @@ export async function POST(
       return NextResponse.json({ message: 'Nao autorizado' }, { status: 401 })
     }
 
+    const { id } = await params
     const { month, year } = await request.json()
     if (!month || !year) {
       return NextResponse.json({ message: 'month e year sao obrigatorios' }, { status: 400 })
     }
 
-    const piggyBank = await prisma.piggyBank.findUnique({ where: { id: params.id } })
+    const piggyBank = await prisma.piggyBank.findUnique({ where: { id } })
     if (!piggyBank) {
       return NextResponse.json({ message: 'Caixinha nao encontrada' }, { status: 404 })
     }
@@ -36,8 +37,8 @@ export async function POST(
     }
 
     await prisma.piggyBankSkippedMonth.upsert({
-      where: { piggyBankId_month_year: { piggyBankId: params.id, month, year } },
-      create: { piggyBankId: params.id, month, year },
+      where: { piggyBankId_month_year: { piggyBankId: id, month, year } },
+      create: { piggyBankId: id, month, year },
       update: {},
     })
 
@@ -54,7 +55,7 @@ export async function POST(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -62,12 +63,13 @@ export async function DELETE(
       return NextResponse.json({ message: 'Nao autorizado' }, { status: 401 })
     }
 
+    const { id } = await params
     const { month, year } = await request.json()
     if (!month || !year) {
       return NextResponse.json({ message: 'month e year sao obrigatorios' }, { status: 400 })
     }
 
-    const piggyBank = await prisma.piggyBank.findUnique({ where: { id: params.id } })
+    const piggyBank = await prisma.piggyBank.findUnique({ where: { id } })
     if (!piggyBank) {
       return NextResponse.json({ message: 'Caixinha nao encontrada' }, { status: 404 })
     }
@@ -80,7 +82,7 @@ export async function DELETE(
     }
 
     await prisma.piggyBankSkippedMonth.deleteMany({
-      where: { piggyBankId: params.id, month, year },
+      where: { piggyBankId: id, month, year },
     })
 
     return NextResponse.json({ skipped: false, month, year })

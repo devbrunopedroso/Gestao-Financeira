@@ -13,7 +13,7 @@ import crypto from 'crypto'
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -22,11 +22,13 @@ export async function GET(
       return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
     }
 
+    const { id } = await params
+
     const membership = await prisma.accountMember.findUnique({
       where: {
         userId_accountId: {
           userId: session.user.id,
-          accountId: params.id,
+          accountId: id,
         },
       },
     })
@@ -40,7 +42,7 @@ export async function GET(
 
     const invitations = await prisma.accountInvitation.findMany({
       where: {
-        accountId: params.id,
+        accountId: id,
         accepted: false,
         expiresAt: {
           gte: new Date(),
@@ -67,7 +69,7 @@ export async function GET(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -76,6 +78,7 @@ export async function POST(
       return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
     }
 
+    const { id } = await params
     const body = await request.json()
     const validatedData = await invitationSchema.validate(body)
 
@@ -84,7 +87,7 @@ export async function POST(
       where: {
         userId_accountId: {
           userId: session.user.id,
-          accountId: params.id,
+          accountId: id,
         },
       },
     })
@@ -101,7 +104,7 @@ export async function POST(
       where: { email: validatedData.email },
       include: {
         accountMemberships: {
-          where: { accountId: params.id },
+          where: { accountId: id },
         },
       },
     })
@@ -116,7 +119,7 @@ export async function POST(
     // Verificar se já existe convite pendente
     const existingInvitation = await prisma.accountInvitation.findFirst({
       where: {
-        accountId: params.id,
+        accountId: id,
         email: validatedData.email,
         accepted: false,
         expiresAt: {
@@ -139,7 +142,7 @@ export async function POST(
 
     const invitation = await prisma.accountInvitation.create({
       data: {
-        accountId: params.id,
+        accountId: id,
         email: validatedData.email,
         role: validatedData.role,
         token,
@@ -173,7 +176,3 @@ export async function POST(
     )
   }
 }
-
-
-
-

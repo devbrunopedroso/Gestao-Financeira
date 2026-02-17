@@ -12,7 +12,7 @@ import { canEdit } from '@/lib/permissions'
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -21,12 +21,13 @@ export async function PUT(
       return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
     }
 
+    const { id } = await params
     const body = await request.json()
     const validatedData = await fixedIncomeSchema.validate(body)
 
     // Buscar a renda fixa para verificar permissões
     const fixedIncome = await prisma.fixedIncome.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: { account: true },
     })
 
@@ -55,7 +56,7 @@ export async function PUT(
     }
 
     const updated = await prisma.fixedIncome.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         amount: validatedData.amount,
         description: validatedData.description || null,
@@ -86,7 +87,7 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -95,8 +96,10 @@ export async function DELETE(
       return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
     }
 
+    const { id } = await params
+
     const fixedIncome = await prisma.fixedIncome.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!fixedIncome) {
@@ -123,7 +126,7 @@ export async function DELETE(
     }
 
     await prisma.fixedIncome.delete({
-      where: { id: params.id },
+      where: { id },
     })
 
     return NextResponse.json({ message: 'Renda fixa excluída com sucesso' })
@@ -135,7 +138,3 @@ export async function DELETE(
     )
   }
 }
-
-
-
-

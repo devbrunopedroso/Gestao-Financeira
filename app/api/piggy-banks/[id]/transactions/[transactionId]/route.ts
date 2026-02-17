@@ -10,7 +10,7 @@ import { canEdit } from '@/lib/permissions'
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string; transactionId: string } }
+  { params }: { params: Promise<{ id: string; transactionId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -19,9 +19,11 @@ export async function DELETE(
       return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
     }
 
+    const { id, transactionId } = await params
+
     // Buscar transação
     const transaction = await prisma.piggyBankTransaction.findUnique({
-      where: { id: params.transactionId },
+      where: { id: transactionId },
       include: { piggyBank: true },
     })
 
@@ -32,7 +34,7 @@ export async function DELETE(
       )
     }
 
-    if (transaction.piggyBankId !== params.id) {
+    if (transaction.piggyBankId !== id) {
       return NextResponse.json(
         { message: 'Transação não pertence a esta caixinha' },
         { status: 400 }
@@ -70,10 +72,10 @@ export async function DELETE(
     // Excluir transação e atualizar caixinha
     await prisma.$transaction([
       prisma.piggyBankTransaction.delete({
-        where: { id: params.transactionId },
+        where: { id: transactionId },
       }),
       prisma.piggyBank.update({
-        where: { id: params.id },
+        where: { id },
         data: {
           currentAmount: newCurrentAmount,
         },
@@ -89,7 +91,3 @@ export async function DELETE(
     )
   }
 }
-
-
-
-

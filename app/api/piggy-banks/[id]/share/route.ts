@@ -13,7 +13,7 @@ import crypto from 'crypto'
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -22,8 +22,10 @@ export async function GET(
       return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
     }
 
+    const { id } = await params
+
     const piggyBank = await prisma.piggyBank.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!piggyBank) {
@@ -51,7 +53,7 @@ export async function GET(
     }
 
     const shares = await prisma.piggyBankShare.findMany({
-      where: { piggyBankId: params.id },
+      where: { piggyBankId: id },
       orderBy: { createdAt: 'desc' },
     })
 
@@ -72,7 +74,7 @@ export async function GET(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -81,11 +83,12 @@ export async function POST(
       return NextResponse.json({ message: 'Não autorizado' }, { status: 401 })
     }
 
+    const { id } = await params
     const body = await request.json()
     const validatedData = await invitationSchema.validate(body)
 
     const piggyBank = await prisma.piggyBank.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!piggyBank) {
@@ -115,7 +118,7 @@ export async function POST(
     // Verificar se já existe compartilhamento pendente
     const existingShare = await prisma.piggyBankShare.findFirst({
       where: {
-        piggyBankId: params.id,
+        piggyBankId: id,
         email: validatedData.email,
         accepted: false,
       },
@@ -135,7 +138,7 @@ export async function POST(
 
     const share = await prisma.piggyBankShare.create({
       data: {
-        piggyBankId: params.id,
+        piggyBankId: id,
         email: validatedData.email,
         role: validatedData.role,
         token,
@@ -167,7 +170,3 @@ export async function POST(
     )
   }
 }
-
-
-
-

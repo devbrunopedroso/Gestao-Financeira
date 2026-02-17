@@ -8,9 +8,7 @@ const withPWA = require('@ducanh2912/next-pwa').default({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  experimental: {
-    serverComponentsExternalPackages: ['pdf-parse', 'pdfjs-dist'],
-  },
+  serverExternalPackages: ['pdf-parse', 'pdfjs-dist'],
 }
 
 module.exports = withPWA(nextConfig)
