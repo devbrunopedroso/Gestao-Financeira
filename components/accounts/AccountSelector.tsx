@@ -31,10 +31,13 @@ export function AccountSelector({ value, onChange, className = '' }: AccountSele
       if (response.ok) {
         const data = await response.json()
         setAccounts(data)
-        if (data.length > 0 && !value) {
+        if (data.length > 0) {
           const saved = localStorage.getItem(STORAGE_KEY)
           const savedExists = saved && data.some((a: Account) => a.id === saved)
-          onChange(savedExists ? saved : data[0].id)
+          const initial = savedExists ? saved : data[0].id
+          if (initial !== value) {
+            onChange(initial)
+          }
         }
       }
     } catch (error) {

@@ -68,9 +68,6 @@ export function Dashboard() {
       if (response.ok) {
         const data = await response.json()
         setAccounts(data)
-        if (data.length > 0) {
-          setSelectedAccountId(data[0].id)
-        }
       }
     } catch (error) {
       console.error('Erro ao buscar contas:', error)

@@ -13,8 +13,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
 import { formatCurrency } from '@/lib/helpers'
-import Link from 'next/link'
-import { Plus, Users, Wallet, UserPlus, Mail, LogOut } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Plus, Users, Wallet, UserPlus, LogOut } from 'lucide-react'
 
 interface Account {
   id: string
@@ -27,8 +27,14 @@ interface Account {
 
 export function AccountsList() {
   const { data: session } = useSession()
+  const router = useRouter()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedId, setSelectedId] = useState('')
+
+  useEffect(() => {
+    setSelectedId(localStorage.getItem('selectedAccountId') || '')
+  }, [])
 
   // Create account modal
   const [createOpen, setCreateOpen] = useState(false)
@@ -178,11 +184,19 @@ export function AccountsList() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {accounts.map(account => (
-            <Card key={account.id} className="hover:shadow-md transition-shadow">
+            <Card
+              key={account.id}
+              className={`hover:shadow-md transition-shadow cursor-pointer ${selectedId === account.id ? 'ring-2 ring-primary' : ''}`}
+              onClick={() => {
+                localStorage.setItem('selectedAccountId', account.id)
+                setSelectedId(account.id)
+                router.push('/')
+              }}
+            >
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-lg">{account.name}</CardTitle>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                     {account.myRole === 'ADMIN' && (
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openInvite(account.id)}>
                         <UserPlus className="h-4 w-4" />
