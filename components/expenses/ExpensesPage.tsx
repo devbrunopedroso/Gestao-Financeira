@@ -324,33 +324,83 @@ export function ExpensesPage() {
     }
     const items: ParsedItem[] = []
 
-    // Detect CSV format: check if first line looks like a header with semicolons
     const firstLine = lines[0]?.trim() || ''
-    const isCSV = firstLine.includes(';') && (
-      firstLine.toLowerCase().includes('data') ||
-      firstLine.toLowerCase().includes('estabelecimento') ||
-      firstLine.toLowerCase().includes('valor')
+    const headerLower = firstLine.toLowerCase()
+
+    // Detect Nubank CSV: "Data,Valor,Identificador,Descrição"
+    const isNubankCSV = firstLine.includes(',') &&
+      headerLower.includes('data') &&
+      headerLower.includes('valor') &&
+      headerLower.includes('descri')
+
+    // Detect standard CSV with semicolons
+    const isSemicolonCSV = firstLine.includes(';') && (
+      headerLower.includes('data') ||
+      headerLower.includes('estabelecimento') ||
+      headerLower.includes('valor')
     )
 
-    if (isCSV) {
-      // Parse CSV with semicolon separator
-      const dataLines = lines.slice(1) // skip header
+    if (isNubankCSV) {
+      setInvoiceBank('Nubank')
+      const dataLines = lines.slice(1)
+      for (const line of dataLines) {
+        // Parse CSV respecting commas inside quotes
+        const cols = line.match(/(".*?"|[^,]+)/g)?.map(c => c.replace(/^"|"$/g, '').trim()) || []
+        if (cols.length < 4) continue
+
+        const dateStr = cols[0] // DD/MM/YYYY
+        const rawAmount = parseFloat(cols[1]) || 0
+        const description = cols[3] || ''
+
+        // Nubank: negative values are expenses, positive are income - skip positive
+        if (rawAmount >= 0) continue
+        const amount = Math.abs(rawAmount)
+
+        const dateParts = dateStr.split('/')
+        const isoDate = dateParts.length === 3
+          ? `${dateParts[2]}-${dateParts[1].padStart(2, '0')}-${dateParts[0].padStart(2, '0')}`
+          : new Date().toISOString().split('T')[0]
+
+        // Clean description: remove verbose suffixes
+        let cleanDesc = description
+          .replace(/ - \d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}.*$/i, '') // CNPJ and after
+          .replace(/ - •••\.\d{3}\.\d{3}-••.*$/i, '') // CPF masked and after
+          .replace(/\s*Agência:.*$/, '')
+          .trim()
+        if (cleanDesc.startsWith('Transferência enviada pelo Pix - ')) {
+          cleanDesc = 'PIX - ' + cleanDesc.replace('Transferência enviada pelo Pix - ', '')
+        } else if (cleanDesc.startsWith('Transferência recebida pelo Pix - ')) {
+          cleanDesc = 'PIX Recebido - ' + cleanDesc.replace('Transferência recebida pelo Pix - ', '')
+        } else if (cleanDesc.startsWith('Pagamento de boleto efetuado - ')) {
+          cleanDesc = 'Boleto - ' + cleanDesc.replace('Pagamento de boleto efetuado - ', '')
+        }
+
+        items.push({
+          date: isoDate,
+          description: cleanDesc,
+          cardholder: '',
+          amount,
+          installment: '-',
+          card: '',
+          selected: true,
+        })
+      }
+    } else if (isSemicolonCSV) {
+      // Parse CSV with semicolon separator (e.g. fatura cartao)
+      const dataLines = lines.slice(1)
       for (const line of dataLines) {
         const cols = line.split(';').map(c => c.trim())
         if (cols.length < 4) continue
 
-        const dateStr = cols[0] // DD/MM/YYYY
+        const dateStr = cols[0]
         const description = cols[1] || ''
         const cardholder = cols[2]?.trim() || ''
         const amountStr = cols[3] || '0'
         const installment = cols[4] || '-'
 
         const amount = parseBRLAmount(amountStr)
-
-        // Skip negative amounts (payments) and zero amounts
         if (amount <= 0) continue
 
-        // Convert DD/MM/YYYY to YYYY-MM-DD for the date input
         const dateParts = dateStr.split('/')
         const isoDate = dateParts.length === 3
           ? `${dateParts[2]}-${dateParts[1].padStart(2, '0')}-${dateParts[0].padStart(2, '0')}`
@@ -375,7 +425,6 @@ export function ExpensesPage() {
         let description = ''
         let amount = 0
 
-        // Try: "Description    R$ 123,45"
         const match = trimmed.match(/^(.+?)\s+R?\$?\s*(-?\d{1,3}(?:[.,]\d{3})*[.,]\d{2})\s*$/)
         if (match) {
           description = match[1].replace(/[-–—;]+\s*$/, '').trim()
