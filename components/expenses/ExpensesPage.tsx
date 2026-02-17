@@ -66,7 +66,7 @@ export function ExpensesPage() {
   const [invoiceOpen, setInvoiceOpen] = useState(false)
   const [invoiceText, setInvoiceText] = useState('')
   const [parsedItems, setParsedItems] = useState<Array<{
-    date: string; description: string; cardholder: string; amount: number; installment: string; card: string; selected: boolean
+    date: string; description: string; cardholder: string; amount: number; installment: string; card: string; selected: boolean; duplicate?: boolean
   }>>([])
   const [invoiceSaving, setInvoiceSaving] = useState(false)
   const [invoiceParsing, setInvoiceParsing] = useState(false)
@@ -143,6 +143,44 @@ export function ExpensesPage() {
       if (existingCat) return existingCat.id
     }
     return undefined
+  }
+
+  // Check parsed items against existing expenses (same date + amount = duplicate)
+  const markDuplicates = async (items: typeof parsedItems): Promise<typeof parsedItems> => {
+    if (!selectedAccountId || items.length === 0) return items
+
+    // Get date range from parsed items
+    const dates = items.map(i => i.date).filter(Boolean).sort()
+    const minDate = dates[0]
+    const maxDate = dates[dates.length - 1]
+    if (!minDate) return items
+
+    try {
+      // Fetch existing expenses for the date range
+      const res = await fetch(
+        `/api/expenses/variable?accountId=${selectedAccountId}&startDate=${minDate}&endDate=${maxDate}`
+      )
+      if (!res.ok) return items
+
+      const existing: Array<{ amount: number; date: string; description?: string }> = (await res.json()).map((e: any) => ({
+        amount: Number(e.amount),
+        date: e.date?.split('T')[0] || '',
+        description: e.description || '',
+      }))
+
+      return items.map(item => {
+        const isDuplicate = existing.some(exp =>
+          exp.date === item.date && Math.abs(exp.amount - item.amount) < 0.01
+        )
+        return {
+          ...item,
+          duplicate: isDuplicate,
+          selected: isDuplicate ? false : item.selected,
+        }
+      })
+    } catch {
+      return items
+    }
   }
 
   const openCreateModal = (type: 'variable' | 'fixed') => {
@@ -278,7 +316,7 @@ export function ExpensesPage() {
   }
 
   // Parse CSV or text invoice
-  const parseInvoice = (text: string) => {
+  const parseInvoice = async (text: string) => {
     if (!text.trim()) return
     const lines = text.split('\n').filter(l => l.trim())
     type ParsedItem = {
@@ -360,7 +398,8 @@ export function ExpensesPage() {
       }
     }
 
-    setParsedItems(items)
+    const checked = await markDuplicates(items)
+    setParsedItems(checked)
     setCardholderFilter('all')
   }
 
@@ -393,7 +432,8 @@ export function ExpensesPage() {
               card: t.card || '',
               selected: true,
             }))
-          setParsedItems(items)
+          const checked = await markDuplicates(items)
+          setParsedItems(checked)
           setCardholderFilter('all')
         } else {
           const err = await res.json().catch(() => ({}))
@@ -408,11 +448,11 @@ export function ExpensesPage() {
     } else {
       // CSV/TXT: parse client-side
       const reader = new FileReader()
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         const text = event.target?.result as string
         if (text) {
           setInvoiceText(text)
-          parseInvoice(text)
+          await parseInvoice(text)
         }
       }
       reader.readAsText(file, 'utf-8')
@@ -844,13 +884,18 @@ export function ExpensesPage() {
             <div className="space-y-4 py-2">
               {/* Stats + filters */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {invoiceBank && (
                     <Badge variant="outline" className="text-xs">{invoiceBank}</Badge>
                   )}
                   <p className="text-sm font-medium">
                     {parsedItems.filter(i => i.selected).length} de {parsedItems.length} itens selecionados
                   </p>
+                  {parsedItems.some(i => i.duplicate) && (
+                    <Badge variant="warning" className="text-xs">
+                      {parsedItems.filter(i => i.duplicate).length} ja lancado{parsedItems.filter(i => i.duplicate).length > 1 ? 's' : ''}
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {cardholders.length > 1 && (
@@ -902,6 +947,11 @@ export function ExpensesPage() {
                         onChange={(e) => updateInvoiceItem(realIndex, 'description', e.target.value)}
                         className="flex-1 h-7 text-xs sm:text-sm"
                       />
+                      {item.duplicate && (
+                        <Badge variant="warning" className="text-[10px] shrink-0">
+                          Ja lancado
+                        </Badge>
+                      )}
                       {item.cardholder && (
                         <Badge variant="outline" className="text-[10px] shrink-0 hidden md:flex">
                           {item.cardholder.split(' ')[0]}

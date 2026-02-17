@@ -22,6 +22,8 @@ export async function GET(request: NextRequest) {
     const accountId = searchParams.get('accountId')
     const month = searchParams.get('month')
     const year = searchParams.get('year')
+    const startDateParam = searchParams.get('startDate')
+    const endDateParam = searchParams.get('endDate')
 
     if (!accountId) {
       return NextResponse.json(
@@ -49,13 +51,18 @@ export async function GET(request: NextRequest) {
 
     // Construir filtros
     const where: any = { accountId }
-    
-    if (month && year) {
+
+    if (startDateParam && endDateParam) {
+      where.date = {
+        gte: new Date(startDateParam + 'T00:00:00'),
+        lte: new Date(endDateParam + 'T23:59:59.999'),
+      }
+    } else if (month && year) {
       const monthNum = parseInt(month)
       const yearNum = parseInt(year)
       const startDate = new Date(yearNum, monthNum - 1, 1)
       const endDate = new Date(yearNum, monthNum, 0, 23, 59, 59, 999)
-      
+
       where.date = {
         gte: startDate,
         lte: endDate,
