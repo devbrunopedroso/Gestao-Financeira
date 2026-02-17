@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { PDFParse } from 'pdf-parse'
 
 interface ParsedTransaction {
   date: string       // YYYY-MM-DD
@@ -43,7 +42,8 @@ export async function POST(request: NextRequest) {
       transactions = result.transactions
       bankName = result.bank
     } else if (fileName.endsWith('.pdf')) {
-      // PDF parsing
+      // PDF parsing - dynamic import to avoid module load failures on Vercel
+      const { PDFParse } = await import('pdf-parse')
       const parser = new PDFParse({ data: new Uint8Array(buffer) })
       const textResult = await parser.getText()
       const text = textResult.text
