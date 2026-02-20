@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/dialog'
 import { formatCurrency } from '@/lib/helpers'
 import {
-  Target, Plus, Pencil, Trash2, Shield, TrendingUp, Crosshair,
+  Target, Plus, Pencil, Trash2, Shield, TrendingUp, Crosshair, DollarSign, Check, X,
 } from 'lucide-react'
 
 const GOAL_TYPE_LABELS: Record<string, { label: string; icon: typeof Target; color: string; desc: string }> = {
@@ -65,6 +65,11 @@ export function GoalsPage() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
 
+  // Inline value update
+  const [updatingGoalId, setUpdatingGoalId] = useState<string | null>(null)
+  const [updateValue, setUpdateValue] = useState('')
+  const [updatingSaving, setUpdatingSaving] = useState(false)
+
   const fetchGoals = useCallback(async () => {
     if (!selectedAccountId) return
     setLoading(true)
@@ -106,7 +111,8 @@ export function GoalsPage() {
   }
 
   const handleSave = async () => {
-    if (!formName || !formTargetValue) return
+    if (!formName) return
+    if (formType !== 'EMERGENCY_FUND' && !formTargetValue) return
     setSaving(true)
     setFormError('')
     try {
@@ -133,7 +139,7 @@ export function GoalsPage() {
           body: JSON.stringify({
             name: formName,
             type: formType,
-            targetValue: Number(formTargetValue),
+            targetValue: formType === 'EMERGENCY_FUND' ? 1 : Number(formTargetValue),
             currentValue: formType === 'CUSTOM' ? Number(formCurrentValue || 0) : 0,
             deadline: formDeadline || null,
             accountId: selectedAccountId,
@@ -160,6 +166,32 @@ export function GoalsPage() {
       if (res.ok) fetchGoals()
     } catch (error) {
       console.error('Erro:', error)
+    }
+  }
+
+  const openUpdateValue = (goal: GoalItem) => {
+    setUpdatingGoalId(goal.id)
+    setUpdateValue(String(goal.currentValue))
+  }
+
+  const handleUpdateValue = async () => {
+    if (!updatingGoalId || updateValue === '') return
+    setUpdatingSaving(true)
+    try {
+      const res = await fetch(`/api/goals/${updatingGoalId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentValue: Number(updateValue) }),
+      })
+      if (res.ok) {
+        setUpdatingGoalId(null)
+        setUpdateValue('')
+        fetchGoals()
+      }
+    } catch (error) {
+      console.error('Erro:', error)
+    } finally {
+      setUpdatingSaving(false)
     }
   }
 
@@ -248,6 +280,41 @@ export function GoalsPage() {
                       </p>
                     </div>
                   </div>
+                  {goal.type === 'CUSTOM' && (
+                    updatingGoalId === goal.id ? (
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={updateValue}
+                            onChange={e => setUpdateValue(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') handleUpdateValue(); if (e.key === 'Escape') setUpdatingGoalId(null) }}
+                            className="h-8 pl-7 text-sm"
+                            autoFocus
+                          />
+                        </div>
+                        <Button size="icon" className="h-8 w-8 bg-success hover:bg-success/80" onClick={handleUpdateValue} disabled={updatingSaving}>
+                          <Check className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setUpdatingGoalId(null)}>
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full gap-1.5 text-xs"
+                        onClick={() => openUpdateValue(goal)}
+                      >
+                        <DollarSign className="h-3.5 w-3.5" />
+                        Atualizar Valor Atual
+                      </Button>
+                    )
+                  )}
                   {goal.type !== 'CUSTOM' && (
                     <p className="text-[11px] text-muted-foreground italic">{typeInfo.desc}</p>
                   )}
