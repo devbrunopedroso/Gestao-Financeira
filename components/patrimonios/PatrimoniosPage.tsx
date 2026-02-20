@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useHideValues } from '@/hooks/useHideValues'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,7 +23,7 @@ import {
   Pencil, Trash2, CheckCircle2, ChevronDown, ChevronUp,
   PieChart as PieChartIcon, Target, BarChart3,
   PiggyBank, Landmark, BadgeDollarSign, BarChart2,
-  Bitcoin, Shield,
+  Bitcoin, Shield, Eye, EyeOff,
 } from 'lucide-react'
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
@@ -164,6 +165,9 @@ export function PatrimoniosPage() {
   const [assets, setAssets] = useState<AssetItem[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedProjections, setExpandedProjections] = useState<Set<string>>(new Set())
+  const { hideValues, toggleHideValues } = useHideValues(selectedAccountId)
+
+  const mask = (value: number) => hideValues ? '••••••' : formatCurrency(value)
 
   // Create/Edit modal
   const [modalOpen, setModalOpen] = useState(false)
@@ -410,11 +414,11 @@ export function PatrimoniosPage() {
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
                   <span className="text-muted-foreground">Renda mensal</span>
-                  <p className="font-semibold text-success">{formatCurrency(proj.monthlyIncome)}</p>
+                  <p className="font-semibold text-success">{mask(proj.monthlyIncome)}</p>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Renda anual</span>
-                  <p className="font-semibold text-success">{formatCurrency(proj.annualIncome)}</p>
+                  <p className="font-semibold text-success">{mask(proj.annualIncome)}</p>
                 </div>
               </div>
             ) : (
@@ -422,13 +426,13 @@ export function PatrimoniosPage() {
                 {proj.endDateProjection && (
                   <div className="flex justify-between text-xs border-b pb-1.5 mb-1">
                     <span className="font-medium text-primary">{proj.endDateProjection.label}</span>
-                    <span className="font-bold text-primary">{formatCurrency(proj.endDateProjection.value)}</span>
+                    <span className="font-bold text-primary">{mask(proj.endDateProjection.value)}</span>
                   </div>
                 )}
                 {proj.projections.map((p) => (
                   <div key={p.label} className="flex justify-between text-xs">
                     <span className="text-muted-foreground">{p.label}</span>
-                    <span className="font-semibold">{formatCurrency(p.value)}</span>
+                    <span className="font-semibold">{mask(p.value)}</span>
                   </div>
                 ))}
               </div>
@@ -449,9 +453,14 @@ export function PatrimoniosPage() {
           </h1>
           <p className="text-sm text-muted-foreground mt-1">Seus bens e patrimônios</p>
         </div>
-        <Button onClick={openCreate} className="gap-1">
-          <Plus className="h-4 w-4" /> Novo Patrimônio
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" onClick={toggleHideValues} className="text-muted-foreground" title={hideValues ? 'Mostrar valores' : 'Esconder valores'}>
+            {hideValues ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+          </Button>
+          <Button onClick={openCreate} className="gap-1">
+            <Plus className="h-4 w-4" /> Novo Patrimônio
+          </Button>
+        </div>
       </div>
 
       <AccountSelector value={selectedAccountId} onChange={setSelectedAccountId} />
@@ -462,7 +471,7 @@ export function PatrimoniosPage() {
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Patrimonio total acumulado</span>
-              <span className="text-lg font-bold text-primary">{formatCurrency(totalPatrimonio)}</span>
+              <span className="text-lg font-bold text-primary">{mask(totalPatrimonio)}</span>
             </div>
           </CardContent>
         </Card>
@@ -562,16 +571,16 @@ export function PatrimoniosPage() {
                               <div className="grid grid-cols-2 gap-2 text-xs">
                                 <div>
                                   <span className="text-muted-foreground">Pago</span>
-                                  <p className="font-semibold">{formatCurrency(asset.piggyBank.currentAmount)}</p>
+                                  <p className="font-semibold">{mask(asset.piggyBank.currentAmount)}</p>
                                 </div>
                                 <div>
                                   <span className="text-muted-foreground">Valor total</span>
-                                  <p className="font-semibold">{formatCurrency(asset.estimatedValue)}</p>
+                                  <p className="font-semibold">{mask(asset.estimatedValue)}</p>
                                 </div>
                                 {asset.piggyBank.monthlyContribution != null && asset.piggyBank.monthlyContribution > 0 && (
                                   <div className="col-span-2">
                                     <span className="text-muted-foreground">Aporte mensal</span>
-                                    <p className="font-semibold text-destructive">{formatCurrency(asset.piggyBank.monthlyContribution)}</p>
+                                    <p className="font-semibold text-destructive">{mask(asset.piggyBank.monthlyContribution)}</p>
                                   </div>
                                 )}
                               </div>
@@ -641,7 +650,7 @@ export function PatrimoniosPage() {
                         <CardContent className="space-y-3">
                           <div className="text-xs">
                             <span className="text-muted-foreground">Valor estimado</span>
-                            <p className="font-semibold text-lg">{formatCurrency(asset.estimatedValue)}</p>
+                            <p className="font-semibold text-lg">{mask(asset.estimatedValue)}</p>
                           </div>
                           {renderProjection(asset)}
                         </CardContent>
@@ -664,7 +673,7 @@ export function PatrimoniosPage() {
                 }))
                 .filter(item => item.total > 0)
                 .map(({ key, cat, total }) => (
-                  <StatCard key={key} title={cat.label} value={total} icon={cat.icon} variant="default" />
+                  <StatCard key={key} title={cat.label} value={total} icon={cat.icon} variant="default" hidden={hideValues} />
                 ))}
             </div>
 
@@ -695,7 +704,7 @@ export function PatrimoniosPage() {
                               <Cell key={entry.category} fill={CATEGORY_COLORS[entry.category] || '#6B7280'} />
                             ))}
                           </Pie>
-                          <Tooltip formatter={(value: unknown) => formatCurrency(Number(value))} />
+                          <Tooltip formatter={(value: unknown) => mask(Number(value))} />
                         </PieChart>
                       </ResponsiveContainer>
                     </div>
@@ -714,7 +723,7 @@ export function PatrimoniosPage() {
                             </div>
                             <div className="flex items-center justify-between">
                               <Progress value={pct} className="h-1.5 flex-1 mr-2" />
-                              <span className="font-semibold text-xs shrink-0">{formatCurrency(entry.value)}</span>
+                              <span className="font-semibold text-xs shrink-0">{mask(entry.value)}</span>
                             </div>
                           </div>
                         )
@@ -840,7 +849,7 @@ export function PatrimoniosPage() {
                         <p className="text-sm text-muted-foreground">Rendimento mensal estimado</p>
                         <p className="text-xs text-muted-foreground">Baseado nos rendimentos configurados</p>
                       </div>
-                      <span className="text-lg font-bold text-purple-700 dark:text-purple-400">{formatCurrency(monthlyYield)}</span>
+                      <span className="text-lg font-bold text-purple-700 dark:text-purple-400">{mask(monthlyYield)}</span>
                     </div>
                   </CardContent>
                 </Card>
@@ -950,7 +959,7 @@ export function PatrimoniosPage() {
                           width={50}
                           tick={{ fontSize: 11 }}
                         />
-                        <Tooltip formatter={(value: unknown) => formatCurrency(Number(value))} />
+                        <Tooltip formatter={(value: unknown) => mask(Number(value))} />
                         <Line
                           type="monotone" dataKey="total" stroke="#A855F7"
                           strokeWidth={2} dot={{ r: 4 }} name="Patrimonio Total"
@@ -961,7 +970,7 @@ export function PatrimoniosPage() {
                       {projectionData.filter(p => p.label !== 'Hoje').map(p => (
                         <div key={p.label} className="text-center p-3 bg-muted/50 rounded-lg">
                           <p className="text-xs text-muted-foreground">{p.label}</p>
-                          <p className="font-bold text-sm">{formatCurrency(p.total)}</p>
+                          <p className="font-bold text-sm">{mask(p.total)}</p>
                           {projectionData[0].total > 0 && (
                             <p className="text-xs text-success">
                               +{(((p.total - projectionData[0].total) / projectionData[0].total) * 100).toFixed(1)}%

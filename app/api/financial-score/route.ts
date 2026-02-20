@@ -95,6 +95,12 @@ export async function GET(request: NextRequest) {
         _sum: { amount: true },
       })
       const spentMap = new Map(varByCategory.map(v => [v.categoryId, Number(v._sum.amount || 0)]))
+      // Somar despesas fixas por categoria
+      const fixedWithCat = activeFixed.filter(e => e.categoryId)
+      for (const e of fixedWithCat) {
+        const prev = spentMap.get(e.categoryId!) || 0
+        spentMap.set(e.categoryId!, prev + Number(e.amount))
+      }
 
       let totalCompliance = 0
       for (const b of budgets) {

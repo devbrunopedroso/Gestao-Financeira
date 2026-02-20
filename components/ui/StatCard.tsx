@@ -12,9 +12,10 @@ interface StatCardProps {
   icon?: LucideIcon
   iconEmoji?: string
   isCurrency?: boolean
+  hidden?: boolean
 }
 
-export function StatCard({ title, value, subtitle, variant = 'default', icon: Icon, iconEmoji, isCurrency = true }: StatCardProps) {
+export function StatCard({ title, value, subtitle, variant = 'default', icon: Icon, iconEmoji, isCurrency = true, hidden = false }: StatCardProps) {
   const variantStyles = {
     default: 'border-border bg-card',
     success: 'border-success/30 bg-success/5',
@@ -35,7 +36,7 @@ export function StatCard({ title, value, subtitle, variant = 'default', icon: Ic
         <div className="min-w-0 flex-1">
           <p className="text-xs sm:text-sm font-medium text-muted-foreground truncate">{title}</p>
           <p className="text-lg sm:text-2xl font-bold mt-1 sm:mt-2 truncate">
-            {isCurrency ? formatCurrency(value) : value}
+            {hidden ? '••••••' : isCurrency ? formatCurrency(value) : value}
           </p>
           {subtitle && <p className="text-xs text-muted-foreground mt-1 truncate">{subtitle}</p>}
         </div>

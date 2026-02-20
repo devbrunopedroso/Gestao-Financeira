@@ -42,23 +42,42 @@ export async function GET(request: NextRequest) {
       include: { category: true },
     })
 
-    // Buscar gastos reais do mês por categoria
+    // Buscar gastos reais do mês por categoria (variáveis + fixas)
     const startDate = new Date(year, month - 1, 1)
     const endDate = new Date(year, month, 0, 23, 59, 59, 999)
 
-    const expenses = await prisma.variableExpense.groupBy({
-      by: ['categoryId'],
-      where: {
-        accountId,
-        date: { gte: startDate, lte: endDate },
-      },
-      _sum: { amount: true },
-    })
+    const [variableByCategory, fixedExpenses] = await Promise.all([
+      prisma.variableExpense.groupBy({
+        by: ['categoryId'],
+        where: {
+          accountId,
+          date: { gte: startDate, lte: endDate },
+        },
+        _sum: { amount: true },
+      }),
+      prisma.fixedExpense.findMany({
+        where: {
+          accountId,
+          categoryId: { not: null },
+          startDate: { lte: endDate },
+          OR: [
+            { endDate: null },
+            { endDate: { gte: startDate } },
+          ],
+        },
+      }),
+    ])
 
     const expenseMap: Record<string, number> = {}
-    expenses.forEach(e => {
+    variableByCategory.forEach(e => {
       if (e.categoryId) {
         expenseMap[e.categoryId] = Number(e._sum.amount || 0)
+      }
+    })
+    // Somar despesas fixas ativas no mês por categoria
+    fixedExpenses.forEach(e => {
+      if (e.categoryId) {
+        expenseMap[e.categoryId] = (expenseMap[e.categoryId] || 0) + Number(e.amount)
       }
     })
 

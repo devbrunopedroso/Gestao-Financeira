@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useHideValues } from '@/hooks/useHideValues'
 import { StatCard } from '@/components/ui/StatCard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { MonthNavigator } from '@/components/ui/MonthNavigator'
@@ -14,7 +15,7 @@ import Link from 'next/link'
 import {
   TrendingUp, TrendingDown, Wallet, Heart,
   Plus, Receipt, PiggyBank, BarChart3,
-  CalendarClock, Check, AlertTriangle,
+  CalendarClock, Check, AlertTriangle, Eye, EyeOff,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -56,12 +57,16 @@ export function Dashboard() {
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear())
   const [summary, setSummary] = useState<MonthlySummary | null>(null)
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState(false)
+  const { hideValues, toggleHideValues } = useHideValues(selectedAccountId)
   const [categoryChart, setCategoryChart] = useState<Array<{ name: string; value: number }>>([])
   const [reminders, setReminders] = useState<Array<{
     id: string; description: string; amount: number; dueDay: number
     status: 'paid' | 'upcoming' | 'due_soon' | 'overdue'; isPaid: boolean
     category?: { name: string; icon: string | null } | null
   }>>([])
+
+  const mask = (value: number) => hideValues ? '••••••' : formatCurrency(value)
 
   const CHART_COLORS = [
     '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
@@ -94,6 +99,7 @@ export function Dashboard() {
 
   const fetchSummary = async () => {
     setLoading(true)
+    setFetchError(false)
     try {
       const [summaryRes, categoryRes, remindersRes] = await Promise.all([
         fetch(`/api/monthly-summary?accountId=${selectedAccountId}&month=${currentMonth}&year=${currentYear}`),
@@ -102,6 +108,8 @@ export function Dashboard() {
       ])
       if (summaryRes.ok) {
         setSummary(await summaryRes.json())
+      } else {
+        setFetchError(true)
       }
       if (categoryRes.ok) {
         const catData = await categoryRes.json()
@@ -119,6 +127,7 @@ export function Dashboard() {
       }
     } catch (error) {
       console.error('Erro ao buscar resumo:', error)
+      setFetchError(true)
     } finally {
       setLoading(false)
     }
@@ -152,14 +161,25 @@ export function Dashboard() {
           value={selectedAccountId}
           onChange={setSelectedAccountId}
         />
-        <MonthNavigator
-          month={currentMonth}
-          year={currentYear}
-          onMonthChange={(month, year) => {
-            setCurrentMonth(month)
-            setCurrentYear(year)
-          }}
-        />
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground"
+            onClick={toggleHideValues}
+            title={hideValues ? 'Mostrar valores' : 'Esconder valores'}
+          >
+            {hideValues ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </Button>
+          <MonthNavigator
+            month={currentMonth}
+            year={currentYear}
+            onMonthChange={(month, year) => {
+              setCurrentMonth(month)
+              setCurrentYear(year)
+            }}
+          />
+        </div>
       </div>
 
       {loading ? (
@@ -183,18 +203,21 @@ export function Dashboard() {
               value={summary.income.total}
               icon={TrendingUp}
               variant="success"
+              hidden={hideValues}
             />
             <StatCard
               title="Despesas Totais"
               value={summary.expenses.total}
               icon={TrendingDown}
               variant="danger"
+              hidden={hideValues}
             />
             <StatCard
               title="Saldo do Mes"
               value={summary.balance}
               icon={Wallet}
               variant={summary.balance >= 0 ? 'success' : 'danger'}
+              hidden={hideValues}
             />
             <Card className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
@@ -262,7 +285,7 @@ export function Dashboard() {
                       </div>
                       <div className="text-right shrink-0 ml-2">
                         <p className={`text-sm font-semibold ${r.isPaid ? 'text-muted-foreground' : 'text-destructive'}`}>
-                          {formatCurrency(r.amount)}
+                          {mask(r.amount)}
                         </p>
                         <Badge variant={
                           r.status === 'paid' ? 'success' :
@@ -295,20 +318,20 @@ export function Dashboard() {
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-muted-foreground">Renda Fixa</span>
                     <span className="font-semibold text-sm sm:text-base">
-                      {formatCurrency(summary.income.fixed.reduce((a: number, b: number) => a + b, 0))}
+                      {mask(summary.income.fixed.reduce((a: number, b: number) => a + b, 0))}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-muted-foreground">Rendas Extras</span>
                     <span className="font-semibold text-sm sm:text-base">
-                      {formatCurrency(summary.income.extra.reduce((a: number, b: number) => a + b, 0))}
+                      {mask(summary.income.extra.reduce((a: number, b: number) => a + b, 0))}
                     </span>
                   </div>
                   <Separator />
                   <div className="flex justify-between items-center">
                     <span className="font-medium">Total</span>
                     <span className="font-bold text-base sm:text-lg text-success">
-                      {formatCurrency(summary.income.total)}
+                      {mask(summary.income.total)}
                     </span>
                   </div>
                 </div>
@@ -327,13 +350,13 @@ export function Dashboard() {
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-muted-foreground">Despesas Fixas</span>
                     <span className="font-semibold text-sm sm:text-base">
-                      {formatCurrency(summary.expenses.fixed.total)}
+                      {mask(summary.expenses.fixed.total)}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-muted-foreground">Despesas Variaveis</span>
                     <span className="font-semibold text-sm sm:text-base">
-                      {formatCurrency(summary.expenses.variable.total)}
+                      {mask(summary.expenses.variable.total)}
                     </span>
                   </div>
                   {summary.expenses.piggyBanks && summary.expenses.piggyBanks.total > 0 && (
@@ -342,7 +365,7 @@ export function Dashboard() {
                         <PiggyBank className="h-3.5 w-3.5" /> Caixinhas
                       </span>
                       <span className="font-semibold text-sm sm:text-base">
-                        {formatCurrency(summary.expenses.piggyBanks.total)}
+                        {mask(summary.expenses.piggyBanks.total)}
                       </span>
                     </div>
                   )}
@@ -350,7 +373,7 @@ export function Dashboard() {
                   <div className="flex justify-between items-center">
                     <span className="font-medium">Total</span>
                     <span className="font-bold text-base sm:text-lg text-destructive">
-                      {formatCurrency(summary.expenses.total)}
+                      {mask(summary.expenses.total)}
                     </span>
                   </div>
                 </div>
@@ -409,11 +432,11 @@ export function Dashboard() {
             </CardContent>
           </Card>
         </>
-      ) : (
+      ) : fetchError ? (
         <div className="text-center py-12 text-muted-foreground">
           Erro ao carregar dados do mes
         </div>
-      )}
+      ) : null}
     </div>
   )
 }
