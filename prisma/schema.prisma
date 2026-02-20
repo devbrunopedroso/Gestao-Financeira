@@ -179,6 +179,7 @@ model FixedExpense {
   description String
   startDate   DateTime
   endDate     DateTime? // null = sem prazo
+  dueDay      Int?      // dia do vencimento (1-31)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -187,8 +188,23 @@ model FixedExpense {
   account    FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   categoryId String?
   category   Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  payments   FixedExpensePayment[]
 
   @@map("fixed_expenses")
+}
+
+// Pagamento mensal de despesa fixa (marcar como pago)
+model FixedExpensePayment {
+  id             String   @id @default(cuid())
+  month          Int
+  year           Int
+  paidAt         DateTime @default(now())
+
+  fixedExpenseId String
+  fixedExpense   FixedExpense @relation(fields: [fixedExpenseId], references: [id], onDelete: Cascade)
+
+  @@unique([fixedExpenseId, month, year])
+  @@map("fixed_expense_payments")
 }
 
 // Despesa Variável

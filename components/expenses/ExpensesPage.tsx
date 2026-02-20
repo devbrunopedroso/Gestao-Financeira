@@ -30,7 +30,9 @@ interface VariableExpense {
 }
 interface FixedExpense {
   id: string; amount: number; description: string; startDate: string; endDate: string | null
+  dueDay?: number | null
   category?: { id: string; name: string; color: string | null; icon: string | null } | null
+  payments?: Array<{ id: string; month: number; year: number; paidAt: string }>
 }
 interface PiggyBankContribution {
   id: string; name: string; amount: number
@@ -57,6 +59,7 @@ export function ExpensesPage() {
   const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0])
   const [formEndDate, setFormEndDate] = useState('')
   const [formCategoryId, setFormCategoryId] = useState('')
+  const [formDueDay, setFormDueDay] = useState('')
   const [saving, setSaving] = useState(false)
   const [continueAdding, setContinueAdding] = useState(false)
 
@@ -98,7 +101,7 @@ export function ExpensesPage() {
     try {
       const [varRes, fixedRes, catRes, impactRes, summaryRes] = await Promise.all([
         fetch(`/api/expenses/variable?accountId=${selectedAccountId}&month=${currentMonth}&year=${currentYear}`),
-        fetch(`/api/expenses/fixed?accountId=${selectedAccountId}`),
+        fetch(`/api/expenses/fixed?accountId=${selectedAccountId}&month=${currentMonth}&year=${currentYear}`),
         fetch(`/api/categories?accountId=${selectedAccountId}`),
         fetch(`/api/expenses/fixed/monthly-impact?accountId=${selectedAccountId}&month=${currentMonth}&year=${currentYear}`),
         fetch(`/api/monthly-summary?accountId=${selectedAccountId}&month=${currentMonth}&year=${currentYear}`),
@@ -278,6 +281,7 @@ export function ExpensesPage() {
     setFormDate(new Date().toISOString().split('T')[0])
     setFormEndDate('')
     setFormCategoryId('')
+    setFormDueDay('')
     setContinueAdding(false)
     setModalOpen(true)
   }
@@ -293,6 +297,7 @@ export function ExpensesPage() {
     } else {
       setFormDate((item as FixedExpense).startDate?.split('T')[0] || '')
       setFormEndDate((item as FixedExpense).endDate?.split('T')[0] || '')
+      setFormDueDay((item as FixedExpense).dueDay ? String((item as FixedExpense).dueDay) : '')
     }
     setModalOpen(true)
   }
@@ -330,6 +335,7 @@ export function ExpensesPage() {
       } else {
         body.startDate = formDate
         body.endDate = formEndDate || undefined
+        body.dueDay = formDueDay ? Number(formDueDay) : null
       }
       const res = await fetch(url, {
         method,
@@ -349,6 +355,26 @@ export function ExpensesPage() {
       console.error('Erro ao salvar:', error)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleTogglePaid = async (expense: FixedExpense) => {
+    const isPaid = expense.payments && expense.payments.length > 0
+    try {
+      if (isPaid) {
+        await fetch(`/api/expenses/fixed/${expense.id}/pay?month=${currentMonth}&year=${currentYear}`, {
+          method: 'DELETE',
+        })
+      } else {
+        await fetch(`/api/expenses/fixed/${expense.id}/pay`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ month: currentMonth, year: currentYear }),
+        })
+      }
+      fetchAll()
+    } catch (error) {
+      console.error('Erro ao atualizar pagamento:', error)
     }
   }
 
@@ -913,34 +939,57 @@ export function ExpensesPage() {
                     <p className="text-sm text-muted-foreground text-center py-6">Nenhuma despesa fixa cadastrada</p>
                   ) : (
                     <div className="space-y-2">
-                      {fixedExpenses.map(expense => (
-                        <div key={expense.id} className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent/50 transition-colors">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p className="font-semibold text-sm sm:text-base text-destructive">{formatCurrency(Number(expense.amount))}</p>
-                              {expense.category && (
-                                <Badge variant="secondary" className="text-xs">
-                                  {expense.category.icon} {expense.category.name}
-                                </Badge>
-                              )}
-                              {!expense.endDate && <Badge variant="outline" className="text-xs">Permanente</Badge>}
+                      {fixedExpenses.map(expense => {
+                        const isPaid = expense.payments && expense.payments.length > 0
+                        return (
+                          <div key={expense.id} className={`flex items-center justify-between p-3 rounded-lg border hover:bg-accent/50 transition-colors ${isPaid ? 'opacity-60' : ''}`}>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className={`font-semibold text-sm sm:text-base ${isPaid ? 'line-through text-muted-foreground' : 'text-destructive'}`}>{formatCurrency(Number(expense.amount))}</p>
+                                {expense.category && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    {expense.category.icon} {expense.category.name}
+                                  </Badge>
+                                )}
+                                {!expense.endDate && <Badge variant="outline" className="text-xs">Permanente</Badge>}
+                                {expense.dueDay && (
+                                  <Badge variant={isPaid ? 'success' : 'warning'} className="text-xs gap-1">
+                                    <CalendarClock className="h-3 w-3" />
+                                    Dia {expense.dueDay}
+                                  </Badge>
+                                )}
+                                {isPaid && (
+                                  <Badge variant="success" className="text-xs gap-1">
+                                    <Check className="h-3 w-3" /> Pago
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-xs sm:text-sm text-muted-foreground truncate">{expense.description}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Inicio: {new Date(expense.startDate).toLocaleDateString('pt-BR')}
+                                {expense.endDate && ` - Fim: ${new Date(expense.endDate).toLocaleDateString('pt-BR')}`}
+                              </p>
                             </div>
-                            <p className="text-xs sm:text-sm text-muted-foreground truncate">{expense.description}</p>
-                            <p className="text-xs text-muted-foreground">
-                              Inicio: {new Date(expense.startDate).toLocaleDateString('pt-BR')}
-                              {expense.endDate && ` - Fim: ${new Date(expense.endDate).toLocaleDateString('pt-BR')}`}
-                            </p>
+                            <div className="flex gap-1 shrink-0 ml-2">
+                              <Button
+                                variant={isPaid ? 'default' : 'outline'}
+                                size="icon"
+                                className={`h-8 w-8 ${isPaid ? 'bg-success hover:bg-success/80 text-success-foreground' : ''}`}
+                                onClick={() => handleTogglePaid(expense)}
+                                title={isPaid ? 'Desmarcar pagamento' : 'Marcar como pago'}
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditModal('fixed', expense)}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete('fixed', expense.id)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
                           </div>
-                          <div className="flex gap-1 shrink-0 ml-2">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditModal('fixed', expense)}>
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete('fixed', expense.id)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                       {pbContributions.length > 0 && (
                         <>
                           {fixedExpenses.length > 0 && <Separator />}
@@ -1342,10 +1391,24 @@ export function ExpensesPage() {
               <Input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} />
             </div>
             {modalType === 'fixed' && (
-              <div className="space-y-2">
-                <Label>Data final (opcional - vazio = permanente)</Label>
-                <Input type="date" value={formEndDate} onChange={(e) => setFormEndDate(e.target.value)} />
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label>Data final (opcional - vazio = permanente)</Label>
+                  <Input type="date" value={formEndDate} onChange={(e) => setFormEndDate(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Dia de vencimento (1-31)</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="31"
+                    placeholder="Ex: 10"
+                    value={formDueDay}
+                    onChange={(e) => setFormDueDay(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">Define o dia do mes para lembrete de pagamento</p>
+                </div>
+              </>
             )}
             {modalType === 'variable' && !editingId && (
               <div className="flex items-center gap-2">

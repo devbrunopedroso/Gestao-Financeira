@@ -45,9 +45,15 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    const month = parseInt(searchParams.get('month') || String(new Date().getMonth() + 1))
+    const year = parseInt(searchParams.get('year') || String(new Date().getFullYear()))
+
     const fixedExpenses = await prisma.fixedExpense.findMany({
       where: { accountId },
-      include: { category: true },
+      include: {
+        category: true,
+        payments: { where: { month, year } },
+      },
       orderBy: { createdAt: 'desc' },
     })
 
@@ -112,6 +118,7 @@ export async function POST(request: NextRequest) {
         startDate: new Date(validatedData.startDate),
         endDate: validatedData.endDate ? new Date(validatedData.endDate) : null,
         categoryId: validatedData.categoryId || null,
+        dueDay: validatedData.dueDay || null,
       },
       include: { category: true },
     })

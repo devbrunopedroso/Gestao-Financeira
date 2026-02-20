@@ -60,6 +60,7 @@ export async function PUT(
         startDate: new Date(validatedData.startDate),
         endDate: validatedData.endDate ? new Date(validatedData.endDate) : null,
         categoryId: validatedData.categoryId || null,
+        dueDay: validatedData.dueDay || null,
       },
       include: { category: true },
     })

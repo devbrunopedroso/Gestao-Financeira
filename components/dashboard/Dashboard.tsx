@@ -14,6 +14,7 @@ import Link from 'next/link'
 import {
   TrendingUp, TrendingDown, Wallet, Heart,
   Plus, Receipt, PiggyBank, BarChart3,
+  CalendarClock, Check, AlertTriangle,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -56,6 +57,11 @@ export function Dashboard() {
   const [summary, setSummary] = useState<MonthlySummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [categoryChart, setCategoryChart] = useState<Array<{ name: string; value: number }>>([])
+  const [reminders, setReminders] = useState<Array<{
+    id: string; description: string; amount: number; dueDay: number
+    status: 'paid' | 'upcoming' | 'due_soon' | 'overdue'; isPaid: boolean
+    category?: { name: string; icon: string | null } | null
+  }>>([])
 
   const CHART_COLORS = [
     '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
@@ -89,9 +95,10 @@ export function Dashboard() {
   const fetchSummary = async () => {
     setLoading(true)
     try {
-      const [summaryRes, categoryRes] = await Promise.all([
+      const [summaryRes, categoryRes, remindersRes] = await Promise.all([
         fetch(`/api/monthly-summary?accountId=${selectedAccountId}&month=${currentMonth}&year=${currentYear}`),
         fetch(`/api/reports/expenses-by-category?accountId=${selectedAccountId}&month=${currentMonth}&year=${currentYear}`),
+        fetch(`/api/expenses/fixed/reminders?accountId=${selectedAccountId}&month=${currentMonth}&year=${currentYear}`),
       ])
       if (summaryRes.ok) {
         setSummary(await summaryRes.json())
@@ -105,6 +112,10 @@ export function Dashboard() {
             value: c.total,
           }))
         setCategoryChart(chartData)
+      }
+      if (remindersRes.ok) {
+        const data = await remindersRes.json()
+        setReminders(data.reminders || [])
       }
     } catch (error) {
       console.error('Erro ao buscar resumo:', error)
@@ -202,6 +213,73 @@ export function Dashboard() {
               </div>
             </Card>
           </div>
+
+          {/* Lembretes de Vencimento */}
+          {reminders.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                  <CalendarClock className="h-5 w-5 text-warning" />
+                  Vencimentos do Mes
+                  {reminders.filter(r => r.status === 'overdue').length > 0 && (
+                    <Badge variant="destructive" className="text-xs gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {reminders.filter(r => r.status === 'overdue').length} atrasado(s)
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {reminders.map((r) => (
+                    <div key={r.id} className={`flex items-center justify-between p-2.5 rounded-lg border ${
+                      r.status === 'paid' ? 'opacity-60 bg-muted/30' :
+                      r.status === 'overdue' ? 'border-destructive/50 bg-destructive/5' :
+                      r.status === 'due_soon' ? 'border-warning/50 bg-warning/5' : ''
+                    }`}>
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
+                          r.status === 'paid' ? 'bg-success/10' :
+                          r.status === 'overdue' ? 'bg-destructive/10' :
+                          r.status === 'due_soon' ? 'bg-warning/10' : 'bg-muted'
+                        }`}>
+                          {r.status === 'paid' ? (
+                            <Check className="h-4 w-4 text-success" />
+                          ) : r.status === 'overdue' ? (
+                            <AlertTriangle className="h-4 w-4 text-destructive" />
+                          ) : (
+                            <CalendarClock className="h-4 w-4 text-warning" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className={`text-sm font-medium truncate ${r.isPaid ? 'line-through text-muted-foreground' : ''}`}>
+                            {r.description}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Dia {r.dueDay} {r.category ? `· ${r.category.icon || ''} ${r.category.name}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0 ml-2">
+                        <p className={`text-sm font-semibold ${r.isPaid ? 'text-muted-foreground' : 'text-destructive'}`}>
+                          {formatCurrency(r.amount)}
+                        </p>
+                        <Badge variant={
+                          r.status === 'paid' ? 'success' :
+                          r.status === 'overdue' ? 'destructive' :
+                          r.status === 'due_soon' ? 'warning' : 'outline'
+                        } className="text-[10px]">
+                          {r.status === 'paid' ? 'Pago' :
+                           r.status === 'overdue' ? 'Atrasado' :
+                           r.status === 'due_soon' ? 'Vence em breve' : `Dia ${r.dueDay}`}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Detalhamento */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

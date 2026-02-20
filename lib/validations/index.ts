@@ -26,6 +26,7 @@ export const fixedExpenseSchema = yup.object({
   startDate: yup.date().required('Data de início é obrigatória'),
   endDate: yup.date().nullable().optional(),
   categoryId: yup.string().optional().nullable(),
+  dueDay: yup.number().nullable().optional().min(1, 'Dia deve ser entre 1 e 31').max(31, 'Dia deve ser entre 1 e 31'),
 })
 
 // Validações para Despesa Variável
