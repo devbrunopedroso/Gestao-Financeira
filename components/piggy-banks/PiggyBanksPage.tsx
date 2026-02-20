@@ -18,7 +18,7 @@ import {
 import { formatCurrency } from '@/lib/helpers'
 import {
   PiggyBank, Plus, Target, TrendingUp, Calendar,
-  ArrowUpCircle, ArrowDownCircle, Trash2, Share2, SkipForward, PlayCircle,
+  ArrowUpCircle, ArrowDownCircle, Trash2, Share2, SkipForward, PlayCircle, Pencil,
 } from 'lucide-react'
 
 interface PiggyBankItem {
@@ -97,6 +97,17 @@ export function PiggyBanksPage() {
   const openCreate = () => {
     setEditingId(null)
     setFormName(''); setFormDescription(''); setFormTarget(''); setFormEndDate(''); setFormMonths(''); setFormMonthlyContribution('')
+    setCreateOpen(true)
+  }
+
+  const openEdit = (pb: PiggyBankItem) => {
+    setEditingId(pb.id)
+    setFormName(pb.name)
+    setFormDescription(pb.description || '')
+    setFormTarget(String(pb.targetAmount))
+    setFormEndDate(pb.endDate ? pb.endDate.split('T')[0] : '')
+    setFormMonths(pb.months != null ? String(pb.months) : '')
+    setFormMonthlyContribution(pb.monthlyContribution != null ? String(pb.monthlyContribution) : '')
     setCreateOpen(true)
   }
 
@@ -249,6 +260,9 @@ export function PiggyBanksPage() {
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-lg truncate">{pb.name}</CardTitle>
                   <div className="flex gap-1 shrink-0">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(pb)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openShare(pb.id)}>
                       <Share2 className="h-3.5 w-3.5" />
                     </Button>
@@ -380,8 +394,8 @@ export function PiggyBanksPage() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Nova Caixinha</DialogTitle>
-            <DialogDescription>Defina um objetivo financeiro.</DialogDescription>
+            <DialogTitle>{editingId ? 'Editar Caixinha' : 'Nova Caixinha'}</DialogTitle>
+            <DialogDescription>{editingId ? 'Altere os dados da caixinha.' : 'Defina um objetivo financeiro.'}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
@@ -415,7 +429,7 @@ export function PiggyBanksPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
             <Button onClick={handleSavePB} disabled={saving || !formName || !formTarget}>
-              {saving ? 'Salvando...' : 'Criar'}
+              {saving ? 'Salvando...' : editingId ? 'Salvar' : 'Criar'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -428,9 +442,44 @@ export function PiggyBanksPage() {
             <DialogTitle>{txType === 'DEPOSIT' ? 'Depositar' : 'Retirar'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {/* Aviso de aporte mensal ja configurado */}
+            {txType === 'DEPOSIT' && (() => {
+              const pb = piggyBanks.find(p => p.id === txPBId)
+              if (!pb?.monthlyContribution || pb.monthlyContribution <= 0) return null
+              return (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3 space-y-1">
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                    <Calendar className="h-4 w-4 shrink-0" />
+                    Aporte mensal configurado
+                  </p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    Esta caixinha ja possui aporte mensal de <strong>{formatCurrency(pb.monthlyContribution)}</strong> contabilizado como despesa fixa. Este deposito sera um <strong>valor extra</strong> alem do aporte mensal.
+                  </p>
+                </div>
+              )
+            })()}
+
             <div className="space-y-2">
               <Label>Valor (R$)</Label>
-              <Input type="number" step="0.01" min="0" placeholder="0,00" value={txAmount} onChange={(e) => setTxAmount(e.target.value)} />
+              <div className="flex gap-2">
+                <Input type="number" step="0.01" min="0" placeholder="0,00" value={txAmount} onChange={(e) => setTxAmount(e.target.value)} className="flex-1" />
+                {txType === 'DEPOSIT' && (() => {
+                  const pb = piggyBanks.find(p => p.id === txPBId)
+                  const total = pb?.monthlyContribution ?? pb?.suggestedMonthlyAmount ?? 0
+                  if (total <= 0) return null
+                  return (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 text-xs h-10"
+                      onClick={() => setTxAmount(String(total.toFixed(2)))}
+                    >
+                      Valor total ({formatCurrency(total)})
+                    </Button>
+                  )
+                })()}
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Descricao (opcional)</Label>

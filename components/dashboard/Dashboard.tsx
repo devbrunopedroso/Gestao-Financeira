@@ -15,6 +15,10 @@ import {
   TrendingUp, TrendingDown, Wallet, Heart,
   Plus, Receipt, PiggyBank, BarChart3,
 } from 'lucide-react'
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  ResponsiveContainer, Tooltip, Cell,
+} from 'recharts'
 
 interface MonthlySummary {
   month: number
@@ -51,6 +55,12 @@ export function Dashboard() {
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear())
   const [summary, setSummary] = useState<MonthlySummary | null>(null)
   const [loading, setLoading] = useState(true)
+  const [categoryChart, setCategoryChart] = useState<Array<{ name: string; value: number }>>([])
+
+  const CHART_COLORS = [
+    '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
+    '#8b5cf6', '#06b6d4', '#f97316', '#ec4899', '#14b8a6',
+  ]
 
   useEffect(() => {
     fetchAccounts()
@@ -79,12 +89,22 @@ export function Dashboard() {
   const fetchSummary = async () => {
     setLoading(true)
     try {
-      const response = await fetch(
-        `/api/monthly-summary?accountId=${selectedAccountId}&month=${currentMonth}&year=${currentYear}`
-      )
-      if (response.ok) {
-        const data = await response.json()
-        setSummary(data)
+      const [summaryRes, categoryRes] = await Promise.all([
+        fetch(`/api/monthly-summary?accountId=${selectedAccountId}&month=${currentMonth}&year=${currentYear}`),
+        fetch(`/api/reports/expenses-by-category?accountId=${selectedAccountId}&month=${currentMonth}&year=${currentYear}`),
+      ])
+      if (summaryRes.ok) {
+        setSummary(await summaryRes.json())
+      }
+      if (categoryRes.ok) {
+        const catData = await categoryRes.json()
+        const chartData = (catData.categories || [])
+          .filter((c: { total: number }) => c.total > 0)
+          .map((c: { categoryName: string; total: number }) => ({
+            name: c.categoryName.length > 12 ? c.categoryName.slice(0, 12) + '…' : c.categoryName,
+            value: c.total,
+          }))
+        setCategoryChart(chartData)
       }
     } catch (error) {
       console.error('Erro ao buscar resumo:', error)
@@ -259,6 +279,33 @@ export function Dashboard() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Gráfico de Despesas por Categoria */}
+          {categoryChart.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-primary" />
+                  Despesas por Categoria
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={categoryChart} margin={{ left: 0, right: 10, top: 5, bottom: 60 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-45} textAnchor="end" interval={0} height={70} />
+                    <YAxis tickFormatter={(v: number) => formatCurrency(v)} tick={{ fontSize: 11 }} width={80} />
+                    <Tooltip formatter={(value: unknown) => formatCurrency(Number(value))} />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]} barSize={32}>
+                      {categoryChart.map((_, index) => (
+                        <Cell key={index} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Acoes Rapidas */}
           <Card>

@@ -17,6 +17,7 @@ model User {
   name          String?
   image         String?
   emailVerified DateTime?
+  blocked       Boolean   @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -90,7 +91,10 @@ model FinancialAccount {
   variableExpenses VariableExpense[]
   categories       Category[]
   piggyBanks       PiggyBank[]
+  assets           Asset[]
   invitations      AccountInvitation[]
+  categoryBudgets  CategoryBudget[]
+  financialGoals   FinancialGoal[]
 
   @@map("financial_accounts")
 }
@@ -221,8 +225,54 @@ model Category {
   account          FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: Cascade)
   fixedExpenses    FixedExpense[]
   variableExpenses VariableExpense[]
+  budgets          CategoryBudget[]
 
   @@map("categories")
+}
+
+// Categoria de Patrimônio
+enum AssetCategory {
+  IMOVEL
+  VEICULO
+  POUPANCA
+  TESOURO_DIRETO
+  RENDA_FIXA
+  FUNDOS_IMOBILIARIOS
+  ACOES
+  CRIPTOMOEDAS
+  PREVIDENCIA
+  INVESTIMENTO // legado - manter para compatibilidade
+  OUTRO
+}
+
+// Status do Patrimônio
+enum AssetStatus {
+  QUITADO
+  EM_ANDAMENTO
+}
+
+// Patrimônio
+model Asset {
+  id              String        @id @default(cuid())
+  name            String
+  description     String?
+  estimatedValue  Decimal       @db.Decimal(10, 2)
+  status          AssetStatus   @default(EM_ANDAMENTO)
+  category        AssetCategory @default(OUTRO)
+  yieldRate       Decimal?      @db.Decimal(5, 2) // rendimento anual em % (ex: 12.00 = 12% a.a.)
+  endDate         DateTime?                       // data final para projeção
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relacionamentos
+  accountId       String
+  account         FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  // Quando em andamento, vincula a uma caixinha para tracking de aportes
+  piggyBankId     String?       @unique
+  piggyBank       PiggyBank?    @relation(fields: [piggyBankId], references: [id], onDelete: SetNull)
+
+  @@map("assets")
 }
 
 // Caixinha / Propósito
@@ -245,6 +295,7 @@ model PiggyBank {
   transactions  PiggyBankTransaction[]
   sharedWith    PiggyBankShare[]
   skippedMonths PiggyBankSkippedMonth[]
+  asset         Asset?
 
   @@map("piggy_banks")
 }
@@ -302,4 +353,48 @@ model PiggyBankSkippedMonth {
 
   @@unique([piggyBankId, month, year])
   @@map("piggy_bank_skipped_months")
+}
+
+// Orçamento por Categoria
+model CategoryBudget {
+  id         String   @id @default(cuid())
+  amount     Decimal  @db.Decimal(10, 2)
+  month      Int
+  year       Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relacionamentos
+  categoryId String
+  category   Category         @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  accountId  String
+  account    FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, accountId, month, year])
+  @@map("category_budgets")
+}
+
+// Tipo de Meta Financeira
+enum GoalType {
+  EMERGENCY_FUND
+  SAVINGS_RATE
+  CUSTOM
+}
+
+// Meta Financeira
+model FinancialGoal {
+  id           String    @id @default(cuid())
+  name         String
+  type         GoalType  @default(CUSTOM)
+  targetValue  Decimal   @db.Decimal(10, 2)
+  currentValue Decimal   @default(0) @db.Decimal(10, 2)
+  deadline     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Relacionamentos
+  accountId String
+  account   FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("financial_goals")
 }

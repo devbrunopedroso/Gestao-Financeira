@@ -18,9 +18,10 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { formatCurrency } from '@/lib/helpers'
 import { Textarea } from '@/components/ui/textarea'
+import { Progress } from '@/components/ui/progress'
 import {
   Receipt, Plus, Pencil, Trash2, TrendingDown, CalendarClock, Zap,
-  RotateCcw, Clock, Send, CreditCard, Upload, X, Check,
+  RotateCcw, Clock, Send, CreditCard, Upload, X, Check, PiggyBank, Wallet,
 } from 'lucide-react'
 
 interface VariableExpense {
@@ -30,6 +31,9 @@ interface VariableExpense {
 interface FixedExpense {
   id: string; amount: number; description: string; startDate: string; endDate: string | null
   category?: { id: string; name: string; color: string | null; icon: string | null } | null
+}
+interface PiggyBankContribution {
+  id: string; name: string; amount: number
 }
 interface Category { id: string; name: string; icon: string | null; isDefault?: boolean }
 
@@ -41,6 +45,7 @@ export function ExpensesPage() {
   const [fixedExpenses, setFixedExpenses] = useState<FixedExpense[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [fixedImpact, setFixedImpact] = useState(0)
+  const [pbContributions, setPbContributions] = useState<PiggyBankContribution[]>([])
   const [loading, setLoading] = useState(true)
 
   // Modal
@@ -73,15 +78,30 @@ export function ExpensesPage() {
   const [invoiceBank, setInvoiceBank] = useState('')
   const [cardholderFilter, setCardholderFilter] = useState('all')
 
+  // Budget states
+  const [budgets, setBudgets] = useState<Array<{
+    id: string; categoryId: string; categoryName: string; categoryColor: string | null
+    categoryIcon: string | null; budgetAmount: number; actualAmount: number; percentage: number
+    status: 'green' | 'warning' | 'danger'
+  }>>([])
+  const [budgetTotalBudget, setBudgetTotalBudget] = useState(0)
+  const [budgetTotalActual, setBudgetTotalActual] = useState(0)
+  const [loadingBudgets, setLoadingBudgets] = useState(false)
+  const [budgetDialogOpen, setBudgetDialogOpen] = useState(false)
+  const [budgetCategoryId, setBudgetCategoryId] = useState('')
+  const [budgetAmount, setBudgetAmount] = useState('')
+  const [savingBudget, setSavingBudget] = useState(false)
+
   const fetchAll = useCallback(async () => {
     if (!selectedAccountId) return
     setLoading(true)
     try {
-      const [varRes, fixedRes, catRes, impactRes] = await Promise.all([
+      const [varRes, fixedRes, catRes, impactRes, summaryRes] = await Promise.all([
         fetch(`/api/expenses/variable?accountId=${selectedAccountId}&month=${currentMonth}&year=${currentYear}`),
         fetch(`/api/expenses/fixed?accountId=${selectedAccountId}`),
         fetch(`/api/categories?accountId=${selectedAccountId}`),
         fetch(`/api/expenses/fixed/monthly-impact?accountId=${selectedAccountId}&month=${currentMonth}&year=${currentYear}`),
+        fetch(`/api/monthly-summary?accountId=${selectedAccountId}&month=${currentMonth}&year=${currentYear}`),
       ])
       if (varRes.ok) {
         const data = await varRes.json()
@@ -102,6 +122,15 @@ export function ExpensesPage() {
         const data = await impactRes.json()
         setFixedImpact(data.total || 0)
       }
+      if (summaryRes.ok) {
+        const data = await summaryRes.json()
+        const items = data.expenses?.piggyBanks?.items || []
+        setPbContributions(items.map((i: any) => ({
+          id: i.id,
+          name: i.description,
+          amount: i.amount,
+        })))
+      }
     } catch (error) {
       console.error('Erro:', error)
     } finally {
@@ -110,6 +139,64 @@ export function ExpensesPage() {
   }, [selectedAccountId, currentMonth, currentYear])
 
   useEffect(() => { fetchAll() }, [fetchAll])
+
+  // Fetch budgets
+  const fetchBudgets = useCallback(async () => {
+    if (!selectedAccountId) return
+    setLoadingBudgets(true)
+    try {
+      const res = await fetch(`/api/budgets?accountId=${selectedAccountId}&month=${currentMonth}&year=${currentYear}`)
+      if (res.ok) {
+        const data = await res.json()
+        setBudgets(data.budgets || [])
+        setBudgetTotalBudget(data.totalBudget || 0)
+        setBudgetTotalActual(data.totalActual || 0)
+      }
+    } catch (error) {
+      console.error('Erro ao buscar orçamentos:', error)
+    } finally {
+      setLoadingBudgets(false)
+    }
+  }, [selectedAccountId, currentMonth, currentYear])
+
+  useEffect(() => { fetchBudgets() }, [fetchBudgets])
+
+  const handleSaveBudget = async () => {
+    if (!budgetCategoryId || !budgetAmount) return
+    setSavingBudget(true)
+    try {
+      const res = await fetch('/api/budgets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          categoryId: budgetCategoryId,
+          amount: Number(budgetAmount),
+          month: currentMonth,
+          year: currentYear,
+          accountId: selectedAccountId,
+        }),
+      })
+      if (res.ok) {
+        setBudgetDialogOpen(false)
+        setBudgetCategoryId('')
+        setBudgetAmount('')
+        fetchBudgets()
+      }
+    } catch (error) {
+      console.error('Erro:', error)
+    } finally {
+      setSavingBudget(false)
+    }
+  }
+
+  const handleDeleteBudget = async (id: string) => {
+    try {
+      const res = await fetch(`/api/budgets/${id}`, { method: 'DELETE' })
+      if (res.ok) fetchBudgets()
+    } catch (error) {
+      console.error('Erro:', error)
+    }
+  }
 
   // Resolve category ID - if it's a default category, create it in DB first
   const resolveCategoryId = async (catId: string): Promise<string | undefined> => {
@@ -539,6 +626,13 @@ export function ExpensesPage() {
     setInvoiceSaving(true)
     let successCount = 0
 
+    // Auto-assign "Cartão de Crédito" category for imported invoices
+    const ccCategory = categories.find(c => c.name === 'Cartão de Crédito')
+    let ccCategoryId: string | undefined
+    if (ccCategory) {
+      ccCategoryId = await resolveCategoryId(ccCategory.id)
+    }
+
     for (const item of selectedItems) {
       try {
         const desc = item.installment && item.installment !== '-'
@@ -552,6 +646,7 @@ export function ExpensesPage() {
             description: desc,
             date: item.date,
             accountId: selectedAccountId,
+            categoryId: ccCategoryId || undefined,
           }),
         })
         if (res.ok) successCount++
@@ -571,7 +666,7 @@ export function ExpensesPage() {
   }
 
   const variableTotal = variableExpenses.reduce((a, b) => a + b.amount, 0)
-  const fixedTotal = fixedExpenses.reduce((a, b) => a + Number(b.amount), 0)
+  const pbTotal = pbContributions.reduce((a, b) => a + b.amount, 0)
 
   // Get unique recent expenses for quick re-launch (last 5 unique descriptions)
   const recentExpenses = variableExpenses
@@ -715,10 +810,11 @@ export function ExpensesPage() {
               {[1, 2, 3].map(i => <Skeleton key={i} className="h-[90px]" />)}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <StatCard title="Despesas Fixas" value={fixedImpact} icon={CalendarClock} variant="danger" />
+              <StatCard title="Caixinhas" value={pbTotal} icon={PiggyBank} variant="danger" />
               <StatCard title="Despesas Variaveis" value={variableTotal} icon={Zap} variant="danger" />
-              <StatCard title="Total do Mes" value={fixedImpact + variableTotal} icon={TrendingDown} variant="danger" />
+              <StatCard title="Total do Mes" value={fixedImpact + pbTotal + variableTotal} icon={TrendingDown} variant="danger" />
             </div>
           )}
 
@@ -730,6 +826,9 @@ export function ExpensesPage() {
               </TabsTrigger>
               <TabsTrigger value="fixed" className="flex-1 sm:flex-initial gap-1">
                 <CalendarClock className="h-4 w-4" /> Fixas
+              </TabsTrigger>
+              <TabsTrigger value="budget" className="flex-1 sm:flex-initial gap-1">
+                <Wallet className="h-4 w-4" /> Orcamento
               </TabsTrigger>
             </TabsList>
 
@@ -810,7 +909,7 @@ export function ExpensesPage() {
                 <CardContent>
                   {loading ? (
                     <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-16" />)}</div>
-                  ) : fixedExpenses.length === 0 ? (
+                  ) : fixedExpenses.length === 0 && pbContributions.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-6">Nenhuma despesa fixa cadastrada</p>
                   ) : (
                     <div className="space-y-2">
@@ -842,6 +941,109 @@ export function ExpensesPage() {
                           </div>
                         </div>
                       ))}
+                      {pbContributions.length > 0 && (
+                        <>
+                          {fixedExpenses.length > 0 && <Separator />}
+                          <p className="text-xs font-medium text-muted-foreground flex items-center gap-1 pt-1">
+                            <PiggyBank className="h-3.5 w-3.5" /> Caixinhas e Patrimônios
+                          </p>
+                          {pbContributions.map(pb => (
+                            <div key={pb.id} className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="font-semibold text-sm sm:text-base text-destructive">{formatCurrency(pb.amount)}</p>
+                                  <Badge variant="secondary" className="text-xs gap-1">
+                                    <PiggyBank className="h-3 w-3" /> Contribuição
+                                  </Badge>
+                                </div>
+                                <p className="text-xs sm:text-sm text-muted-foreground truncate">{pb.name}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Budget tab */}
+            <TabsContent value="budget">
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base sm:text-lg">Orcamento por Categoria</CardTitle>
+                    <Button size="sm" className="gap-1" onClick={() => {
+                      setBudgetCategoryId('')
+                      setBudgetAmount('')
+                      setBudgetDialogOpen(true)
+                    }}>
+                      <Plus className="h-4 w-4" /> Definir
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {loadingBudgets ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3].map(i => <Skeleton key={i} className="h-16" />)}
+                    </div>
+                  ) : budgets.length === 0 ? (
+                    <div className="text-center py-8 space-y-3">
+                      <Wallet className="h-10 w-10 text-muted-foreground mx-auto" />
+                      <p className="text-sm text-muted-foreground">Nenhum orcamento definido para este mes.</p>
+                      <p className="text-xs text-muted-foreground">Defina limites de gastos por categoria para controlar melhor suas despesas.</p>
+                      <Button size="sm" variant="outline" className="gap-1" onClick={() => setBudgetDialogOpen(true)}>
+                        <Plus className="h-4 w-4" /> Definir Orcamento
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {/* Resumo */}
+                      <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Total Orcado</p>
+                          <p className="font-semibold">{formatCurrency(budgetTotalBudget)}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">Total Gasto</p>
+                          <p className={`font-semibold ${budgetTotalActual > budgetTotalBudget ? 'text-destructive' : 'text-success'}`}>
+                            {formatCurrency(budgetTotalActual)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Lista de categorias */}
+                      {budgets.map(b => (
+                        <div key={b.id} className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              {b.categoryIcon && <span className="text-sm">{b.categoryIcon}</span>}
+                              <span className="font-medium text-sm">{b.categoryName}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground">
+                                {formatCurrency(b.actualAmount)} / {formatCurrency(b.budgetAmount)}
+                              </span>
+                              <Badge variant={b.status === 'green' ? 'success' : b.status === 'warning' ? 'outline' : 'destructive'} className="text-xs">
+                                {b.percentage.toFixed(0)}%
+                              </Badge>
+                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDeleteBudget(b.id)}>
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                          <Progress
+                            value={Math.min(b.percentage, 100)}
+                            className="h-2"
+                            indicatorClassName={
+                              b.status === 'green' ? 'bg-emerald-500'
+                              : b.status === 'warning' ? 'bg-amber-500'
+                              : 'bg-destructive'
+                            }
+                          />
+                        </div>
+                      ))}
                     </div>
                   )}
                 </CardContent>
@@ -850,6 +1052,37 @@ export function ExpensesPage() {
           </Tabs>
         </>
       )}
+
+      {/* Budget Dialog */}
+      <Dialog open={budgetDialogOpen} onOpenChange={setBudgetDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Definir Orcamento</DialogTitle>
+            <DialogDescription>Defina um limite de gastos para uma categoria neste mes.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Categoria</Label>
+              <NativeSelect value={budgetCategoryId} onChange={(e) => setBudgetCategoryId(e.target.value)}>
+                <option value="">Selecione...</option>
+                {categories.filter(c => !c.isDefault).map(c => (
+                  <option key={c.id} value={c.id}>{c.icon ? `${c.icon} ` : ''}{c.name}</option>
+                ))}
+              </NativeSelect>
+            </div>
+            <div className="space-y-2">
+              <Label>Limite (R$)</Label>
+              <Input type="number" step="0.01" min="0" placeholder="0,00" value={budgetAmount} onChange={e => setBudgetAmount(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBudgetDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleSaveBudget} disabled={savingBudget || !budgetCategoryId || !budgetAmount}>
+              {savingBudget ? 'Salvando...' : 'Salvar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Invoice Import Modal */}
       <Dialog open={invoiceOpen} onOpenChange={setInvoiceOpen}>

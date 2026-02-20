@@ -13,6 +13,12 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async signIn({ user }) {
+      // Bloquear login de usuarios bloqueados
+      if (user.id) {
+        const dbUser = await prisma.user.findUnique({ where: { id: user.id }, select: { blocked: true } })
+        if (dbUser?.blocked) return false
+      }
+
       // Auto-accept pending invitations for this email
       if (user.id && user.email) {
         try {

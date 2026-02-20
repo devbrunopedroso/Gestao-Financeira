@@ -13,10 +13,15 @@ import { MonthNavigator } from '@/components/ui/MonthNavigator'
 import { StatCard } from '@/components/ui/StatCard'
 import { formatCurrency } from '@/lib/helpers'
 import { MONTHS } from '@/lib/constants'
+import { NativeSelect } from '@/components/ui/select-native'
 import {
   BarChart3, PieChart, TrendingUp, TrendingDown, PiggyBank,
-  Target, ArrowUpRight, ArrowDownRight, Minus,
+  Target, ArrowUpRight, ArrowDownRight, Minus, ArrowLeftRight,
 } from 'lucide-react'
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid,
+  ResponsiveContainer, Tooltip, Legend,
+} from 'recharts'
 
 interface CategoryExpense {
   categoryId: string | null
@@ -52,7 +57,11 @@ export function ReportsPage() {
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear())
 
   // Expenses by category
-  const [categoryData, setCategoryData] = useState<{ categories: CategoryExpense[]; total: number } | null>(null)
+  const [categoryData, setCategoryData] = useState<{
+    categories: CategoryExpense[]
+    piggyBanks: { items: Array<{ id: string; description: string; amount: number }>; total: number }
+    total: number
+  } | null>(null)
   const [loadingCategories, setLoadingCategories] = useState(false)
 
   // Monthly evolution
@@ -64,6 +73,24 @@ export function ReportsPage() {
     piggyBanks: PiggyBankProgress[]; total: number; completed: number; inProgress: number; notStarted: number
   } | null>(null)
   const [loadingPiggy, setLoadingPiggy] = useState(false)
+
+  // Month comparison
+  const [compMonth1, setCompMonth1] = useState(() => {
+    const d = new Date(); d.setMonth(d.getMonth() - 1)
+    return d.getMonth() + 1
+  })
+  const [compYear1, setCompYear1] = useState(() => {
+    const d = new Date(); d.setMonth(d.getMonth() - 1)
+    return d.getFullYear()
+  })
+  const [compMonth2, setCompMonth2] = useState(new Date().getMonth() + 1)
+  const [compYear2, setCompYear2] = useState(new Date().getFullYear())
+  const [comparisonData, setComparisonData] = useState<any>(null)
+  const [loadingComparison, setLoadingComparison] = useState(false)
+
+  // Cash flow projection
+  const [projectionData, setProjectionData] = useState<any>(null)
+  const [loadingProjection, setLoadingProjection] = useState(false)
 
   const fetchCategoryReport = useCallback(async () => {
     if (!selectedAccountId) return
@@ -118,11 +145,41 @@ export function ReportsPage() {
     }
   }, [selectedAccountId])
 
+  const fetchComparison = useCallback(async () => {
+    if (!selectedAccountId) return
+    setLoadingComparison(true)
+    try {
+      const res = await fetch(
+        `/api/reports/month-comparison?accountId=${selectedAccountId}&month1=${compMonth1}&year1=${compYear1}&month2=${compMonth2}&year2=${compYear2}`
+      )
+      if (res.ok) setComparisonData(await res.json())
+    } catch (error) {
+      console.error('Erro:', error)
+    } finally {
+      setLoadingComparison(false)
+    }
+  }, [selectedAccountId, compMonth1, compYear1, compMonth2, compYear2])
+
+  const fetchProjection = useCallback(async () => {
+    if (!selectedAccountId) return
+    setLoadingProjection(true)
+    try {
+      const res = await fetch(`/api/reports/cash-flow-projection?accountId=${selectedAccountId}&months=6`)
+      if (res.ok) setProjectionData(await res.json())
+    } catch (error) {
+      console.error('Erro:', error)
+    } finally {
+      setLoadingProjection(false)
+    }
+  }, [selectedAccountId])
+
   useEffect(() => {
     fetchCategoryReport()
     fetchEvolution()
     fetchPiggyProgress()
-  }, [fetchCategoryReport, fetchEvolution, fetchPiggyProgress])
+    fetchComparison()
+    fetchProjection()
+  }, [fetchCategoryReport, fetchEvolution, fetchPiggyProgress, fetchComparison, fetchProjection])
 
   const maxEvolutionValue = evolution.length > 0
     ? Math.max(...evolution.map(e => Math.max(e.income, e.expenses)))
@@ -154,7 +211,7 @@ export function ReportsPage() {
 
       {selectedAccountId && (
         <Tabs defaultValue="categories" className="space-y-4">
-          <TabsList className="w-full sm:w-auto">
+          <TabsList className="w-full sm:w-auto overflow-x-auto">
             <TabsTrigger value="categories" className="flex-1 sm:flex-initial gap-1">
               <PieChart className="h-4 w-4 hidden sm:inline" />
               Categorias
@@ -166,6 +223,14 @@ export function ReportsPage() {
             <TabsTrigger value="piggybanks" className="flex-1 sm:flex-initial gap-1">
               <PiggyBank className="h-4 w-4 hidden sm:inline" />
               Caixinhas
+            </TabsTrigger>
+            <TabsTrigger value="comparison" className="flex-1 sm:flex-initial gap-1">
+              <ArrowLeftRight className="h-4 w-4 hidden sm:inline" />
+              Comparativo
+            </TabsTrigger>
+            <TabsTrigger value="projection" className="flex-1 sm:flex-initial gap-1">
+              <TrendingUp className="h-4 w-4 hidden sm:inline" />
+              Projecao
             </TabsTrigger>
           </TabsList>
 
@@ -229,16 +294,49 @@ export function ReportsPage() {
                             </div>
                           )
                         })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
 
-                        <Separator className="my-3" />
+                {/* Caixinhas e Patrimônios */}
+                {categoryData.piggyBanks && categoryData.piggyBanks.total > 0 && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                        <PiggyBank className="h-5 w-5 text-primary" />
+                        Caixinhas e Patrimonios
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        {categoryData.piggyBanks.items.map((item) => (
+                          <div key={item.id} className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground truncate">{item.description}</span>
+                            <span className="font-semibold shrink-0 ml-2">{formatCurrency(item.amount)}</span>
+                          </div>
+                        ))}
+                        <Separator />
                         <div className="flex justify-between items-center">
-                          <span className="font-bold text-sm sm:text-base">Total</span>
-                          <span className="font-bold text-destructive text-sm sm:text-base">
-                            {formatCurrency(categoryData.total)}
+                          <span className="font-medium text-sm">Subtotal Caixinhas</span>
+                          <span className="font-bold text-primary text-sm">
+                            {formatCurrency(categoryData.piggyBanks.total)}
                           </span>
                         </div>
                       </div>
-                    )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Total Geral */}
+                <Card className="border-2">
+                  <CardContent className="pt-4 pb-4">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-base sm:text-lg">Total Geral de Despesas</span>
+                      <span className="font-bold text-destructive text-base sm:text-lg">
+                        {formatCurrency(categoryData.total)}
+                      </span>
+                    </div>
                   </CardContent>
                 </Card>
               </>
@@ -442,6 +540,244 @@ export function ReportsPage() {
                 )}
               </>
             ) : null}
+          </TabsContent>
+
+          {/* TAB: Month Comparison */}
+          <TabsContent value="comparison" className="space-y-4">
+            {/* Month selectors */}
+            <Card>
+              <CardContent className="py-4">
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  <div className="flex items-center gap-2 flex-1">
+                    <NativeSelect value={compMonth1} onChange={e => setCompMonth1(Number(e.target.value))}>
+                      {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                    </NativeSelect>
+                    <NativeSelect value={compYear1} onChange={e => setCompYear1(Number(e.target.value))}>
+                      {[currentYear - 1, currentYear, currentYear + 1].map(y => <option key={y} value={y}>{y}</option>)}
+                    </NativeSelect>
+                  </div>
+                  <ArrowLeftRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <div className="flex items-center gap-2 flex-1">
+                    <NativeSelect value={compMonth2} onChange={e => setCompMonth2(Number(e.target.value))}>
+                      {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                    </NativeSelect>
+                    <NativeSelect value={compYear2} onChange={e => setCompYear2(Number(e.target.value))}>
+                      {[currentYear - 1, currentYear, currentYear + 1].map(y => <option key={y} value={y}>{y}</option>)}
+                    </NativeSelect>
+                  </div>
+                  <Button size="sm" onClick={fetchComparison} disabled={loadingComparison}>
+                    {loadingComparison ? 'Carregando...' : 'Comparar'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {loadingComparison ? (
+              <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-20" />)}</div>
+            ) : comparisonData ? (
+              <>
+                {/* Summary cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <Card>
+                    <CardContent className="py-3 text-center">
+                      <p className="text-xs text-muted-foreground">Receita</p>
+                      <p className="font-bold">{formatCurrency(comparisonData.month2.income)}</p>
+                      {(() => {
+                        const diff = comparisonData.month2.income - comparisonData.month1.income
+                        return (
+                          <p className={`text-xs ${diff >= 0 ? 'text-success' : 'text-destructive'}`}>
+                            {diff >= 0 ? '+' : ''}{formatCurrency(diff)}
+                          </p>
+                        )
+                      })()}
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="py-3 text-center">
+                      <p className="text-xs text-muted-foreground">Despesas</p>
+                      <p className="font-bold">{formatCurrency(comparisonData.month2.expenses)}</p>
+                      {(() => {
+                        const diff = comparisonData.month2.expenses - comparisonData.month1.expenses
+                        return (
+                          <p className={`text-xs ${diff <= 0 ? 'text-success' : 'text-destructive'}`}>
+                            {diff >= 0 ? '+' : ''}{formatCurrency(diff)}
+                          </p>
+                        )
+                      })()}
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="py-3 text-center">
+                      <p className="text-xs text-muted-foreground">Saldo</p>
+                      <p className={`font-bold ${comparisonData.month2.balance >= 0 ? 'text-success' : 'text-destructive'}`}>
+                        {formatCurrency(comparisonData.month2.balance)}
+                      </p>
+                      {(() => {
+                        const diff = comparisonData.month2.balance - comparisonData.month1.balance
+                        return (
+                          <p className={`text-xs ${diff >= 0 ? 'text-success' : 'text-destructive'}`}>
+                            {diff >= 0 ? '+' : ''}{formatCurrency(diff)}
+                          </p>
+                        )
+                      })()}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Highlights */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {comparisonData.biggestIncrease && (
+                    <Card className="border-destructive/30">
+                      <CardContent className="py-3 flex items-center gap-3">
+                        <ArrowUpRight className="h-5 w-5 text-destructive shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Maior aumento</p>
+                          <p className="font-medium text-sm">{comparisonData.biggestIncrease.categoryName}</p>
+                          <p className="text-xs text-destructive">+{formatCurrency(comparisonData.biggestIncrease.change)} ({comparisonData.biggestIncrease.changePercent > 0 ? '+' : ''}{comparisonData.biggestIncrease.changePercent}%)</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                  {comparisonData.biggestSaving && (
+                    <Card className="border-success/30">
+                      <CardContent className="py-3 flex items-center gap-3">
+                        <ArrowDownRight className="h-5 w-5 text-success shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Maior economia</p>
+                          <p className="font-medium text-sm">{comparisonData.biggestSaving.categoryName}</p>
+                          <p className="text-xs text-success">{formatCurrency(comparisonData.biggestSaving.change)} ({comparisonData.biggestSaving.changePercent}%)</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+
+                {/* Category breakdown */}
+                {comparisonData.changes?.length > 0 && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">Por Categoria</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {comparisonData.changes.map((c: any) => {
+                        const maxVal = Math.max(c.month1Value, c.month2Value, 1)
+                        return (
+                          <div key={c.categoryId} className="space-y-1.5">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="font-medium">{c.categoryName}</span>
+                              <Badge variant={c.change <= 0 ? 'success' : 'destructive'} className="text-xs">
+                                {c.change >= 0 ? '+' : ''}{formatCurrency(c.change)}
+                              </Badge>
+                            </div>
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 text-xs">
+                                <span className="w-12 text-muted-foreground shrink-0">{MONTHS[compMonth1 - 1]?.slice(0, 3)}</span>
+                                <div className="flex-1 bg-muted rounded-full h-2.5">
+                                  <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${(c.month1Value / maxVal) * 100}%` }} />
+                                </div>
+                                <span className="w-20 text-right shrink-0">{formatCurrency(c.month1Value)}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-xs">
+                                <span className="w-12 text-muted-foreground shrink-0">{MONTHS[compMonth2 - 1]?.slice(0, 3)}</span>
+                                <div className="flex-1 bg-muted rounded-full h-2.5">
+                                  <div className="bg-emerald-500 h-2.5 rounded-full" style={{ width: `${(c.month2Value / maxVal) * 100}%` }} />
+                                </div>
+                                <span className="w-20 text-right shrink-0">{formatCurrency(c.month2Value)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            ) : (
+              <Card className="p-8">
+                <div className="text-center space-y-2">
+                  <ArrowLeftRight className="h-10 w-10 text-muted-foreground mx-auto" />
+                  <p className="text-sm text-muted-foreground">Selecione dois meses e clique em Comparar.</p>
+                </div>
+              </Card>
+            )}
+          </TabsContent>
+
+          {/* TAB: Cash Flow Projection */}
+          <TabsContent value="projection" className="space-y-4">
+            {loadingProjection ? (
+              <div className="space-y-3">{[1, 2].map(i => <Skeleton key={i} className="h-40" />)}</div>
+            ) : projectionData && projectionData.projections?.length > 0 ? (
+              <>
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5 text-primary" />
+                      Projecao de Fluxo de Caixa
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground">
+                      Projeção para os próximos 6 meses baseada em receitas fixas, despesas fixas ativas, caixinhas e média de despesas variáveis dos últimos {projectionData.assumptions.avgVariableMonths} meses.
+                    </p>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={projectionData.projections}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                        <YAxis
+                          tickFormatter={(v) => {
+                            if (Math.abs(v) >= 1000) return `${(v / 1000).toFixed(0)}k`
+                            return String(v)
+                          }}
+                          width={50}
+                          tick={{ fontSize: 11 }}
+                        />
+                        <Tooltip formatter={(value: unknown) => formatCurrency(Number(value))} />
+                        <Legend />
+                        <Line type="monotone" dataKey="income" stroke="#22C55E" strokeWidth={2} name="Receita" dot={{ r: 3 }} />
+                        <Line type="monotone" dataKey="totalExpenses" stroke="#EF4444" strokeWidth={2} name="Despesas" dot={{ r: 3 }} />
+                        <Line type="monotone" dataKey="balance" stroke="#3B82F6" strokeWidth={2} strokeDasharray="5 5" name="Saldo" dot={{ r: 3 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                {/* Projected months breakdown */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {projectionData.projections.map((p: any) => (
+                    <Card key={p.label}>
+                      <CardContent className="py-3 text-center space-y-1">
+                        <p className="text-xs font-medium text-muted-foreground">{p.label}</p>
+                        <p className="text-xs text-success">+{formatCurrency(p.income)}</p>
+                        <p className="text-xs text-destructive">-{formatCurrency(p.totalExpenses)}</p>
+                        <Separator />
+                        <p className={`font-bold text-sm ${p.balance >= 0 ? 'text-success' : 'text-destructive'}`}>
+                          {formatCurrency(p.balance)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                {/* Assumptions card */}
+                <Card className="bg-muted/30">
+                  <CardContent className="py-4">
+                    <p className="text-xs text-muted-foreground">
+                      <strong>Premissas:</strong> Receita fixa mensal de {formatCurrency(projectionData.assumptions.fixedIncomeTotal)}.
+                      Média de despesas variáveis: {formatCurrency(projectionData.assumptions.avgVariableTotal)}/mês
+                      (baseado nos últimos {projectionData.assumptions.avgVariableMonths} meses).
+                      Rendas extras e despesas variáveis sazonais não estão incluídas na projeção.
+                    </p>
+                  </CardContent>
+                </Card>
+              </>
+            ) : (
+              <Card className="p-8">
+                <div className="text-center space-y-2">
+                  <TrendingUp className="h-10 w-10 text-muted-foreground mx-auto" />
+                  <p className="text-sm text-muted-foreground">Adicione receitas e despesas para ver a projeção.</p>
+                </div>
+              </Card>
+            )}
           </TabsContent>
         </Tabs>
       )}

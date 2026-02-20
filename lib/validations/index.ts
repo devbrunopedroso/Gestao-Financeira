@@ -62,6 +62,42 @@ export const piggyBankTransactionSchema = yup.object({
   date: yup.date().required('Data é obrigatória'),
 })
 
+// Validações para Patrimônio
+export const assetSchema = yup.object({
+  name: yup.string().required('Nome é obrigatório').min(3, 'Nome deve ter pelo menos 3 caracteres'),
+  description: yup.string().optional(),
+  estimatedValue: yup.number().required('Valor estimado é obrigatório').positive('Valor deve ser positivo'),
+  status: yup.string().oneOf(['QUITADO', 'EM_ANDAMENTO']).required('Status é obrigatório'),
+  category: yup.string().oneOf([
+    'IMOVEL', 'VEICULO', 'POUPANCA', 'TESOURO_DIRETO', 'RENDA_FIXA',
+    'FUNDOS_IMOBILIARIOS', 'ACOES', 'CRIPTOMOEDAS', 'PREVIDENCIA',
+    'INVESTIMENTO', 'OUTRO',
+  ]).required('Categoria é obrigatória'),
+  monthlyPayment: yup.number().nullable().optional().positive('Valor deve ser positivo'),
+  yieldRate: yup.number().nullable().optional().min(0, 'Rendimento não pode ser negativo'),
+  endDate: yup.date().nullable().optional(),
+  accountId: yup.string().required('Conta é obrigatória'),
+})
+
+// Validações para Orçamento por Categoria
+export const categoryBudgetSchema = yup.object({
+  categoryId: yup.string().required('Categoria é obrigatória'),
+  amount: yup.number().required('Valor é obrigatório').positive('Valor deve ser positivo'),
+  month: yup.number().required('Mês é obrigatório').min(1).max(12),
+  year: yup.number().required('Ano é obrigatório').min(2000),
+  accountId: yup.string().required('Conta é obrigatória'),
+})
+
+// Validações para Meta Financeira
+export const financialGoalSchema = yup.object({
+  name: yup.string().required('Nome é obrigatório').min(3, 'Nome deve ter pelo menos 3 caracteres'),
+  type: yup.string().oneOf(['EMERGENCY_FUND', 'SAVINGS_RATE', 'CUSTOM']).required('Tipo é obrigatório'),
+  targetValue: yup.number().required('Valor alvo é obrigatório').positive('Valor deve ser positivo'),
+  currentValue: yup.number().optional().min(0),
+  deadline: yup.date().nullable().optional(),
+  accountId: yup.string().required('Conta é obrigatória'),
+})
+
 // Validações para Convite
 export const invitationSchema = yup.object({
   email: yup.string().email('Email inválido').required('Email é obrigatório'),

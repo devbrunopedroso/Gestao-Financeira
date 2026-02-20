@@ -8,6 +8,7 @@ export const DEFAULT_CATEGORIES = [
   { name: 'Lazer', color: '#DDA15E', icon: '🎮' },
   { name: 'Roupas', color: '#BC6C25', icon: '👕' },
   { name: 'Contas', color: '#6C5CE7', icon: '💳' },
+  { name: 'Cartão de Crédito', color: '#E17055', icon: '💳' },
   { name: 'Outros', color: '#95A5A6', icon: '📦' },
 ]
 

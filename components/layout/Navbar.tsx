@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   LayoutDashboard, Wallet, TrendingUp, Receipt, Tag,
-  PiggyBank, BarChart3, Menu, X, LogOut,
+  PiggyBank, Building2, BarChart3, Menu, X, LogOut, Target,
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -24,8 +24,14 @@ const navLinks = [
   { href: '/expenses', label: 'Despesas', icon: Receipt },
   { href: '/categories', label: 'Categorias', icon: Tag },
   { href: '/piggy-banks', label: 'Caixinhas', icon: PiggyBank },
+  { href: '/patrimonios', label: 'Patrimonios', icon: Building2 },
+  { href: '/goals', label: 'Metas', icon: Target },
   { href: '/reports', label: 'Relatorios', icon: BarChart3 },
 ]
+
+// Páginas que já estão no BottomNav — não mostrar no menu mobile
+const bottomNavHrefs = new Set(['/', '/incomes', '/expenses', '/piggy-banks', '/reports'])
+const mobileMenuLinks = navLinks.filter((link) => !bottomNavHrefs.has(link.href))
 
 export function Navbar({ userName, userImage }: NavbarProps) {
   const pathname = usePathname()
@@ -113,7 +119,7 @@ export function Navbar({ userName, userImage }: NavbarProps) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-4 py-3 space-y-1">
-              {navLinks.map((link) => {
+              {mobileMenuLinks.map((link) => {
                 const isActive = pathname === link.href
                 return (
                   <Link

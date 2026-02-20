@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getMonthRange } from '@/lib/helpers'
+import { getMonthRange, getActivePiggyBankContributions } from '@/lib/helpers'
 
 /**
  * GET /api/reports/monthly-evolution
@@ -102,6 +102,12 @@ export async function GET(request: NextRequest) {
       },
     })
 
+    // Buscar caixinhas com contribuição mensal
+    const piggyBanks = await prisma.piggyBank.findMany({
+      where: { accountId, monthlyContribution: { not: null } },
+      include: { skippedMonths: true },
+    })
+
     // Agrupar por mês
     const monthlyData: Record<
       string,
@@ -171,6 +177,18 @@ export async function GET(request: NextRequest) {
         monthlyData[key].expenses += Number(expense.amount)
         monthlyData[key].balance -= Number(expense.amount)
       }
+    })
+
+    // Adicionar contribuições de caixinhas/patrimônios
+    Object.keys(monthlyData).forEach((key) => {
+      const [year, month] = key.split('-').map(Number)
+      const { startDate: monthStart, endDate: monthEnd } = getMonthRange(year, month)
+
+      const activePBs = getActivePiggyBankContributions(piggyBanks, monthStart, monthEnd, month, year)
+      const pbTotal = activePBs.reduce((sum, pb) => sum + Number(pb.monthlyContribution), 0)
+
+      monthlyData[key].expenses += pbTotal
+      monthlyData[key].balance -= pbTotal
     })
 
     // Converter para array e ordenar
