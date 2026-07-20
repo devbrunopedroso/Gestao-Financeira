@@ -50,6 +50,10 @@ export function ExpensesPage() {
   const [pbContributions, setPbContributions] = useState<PiggyBankContribution[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Checklist de despesas fixas
+  const [fixedFilter, setFixedFilter] = useState<'all' | 'pending' | 'paid'>('all')
+  const [bulkPaying, setBulkPaying] = useState(false)
+
   // Modal
   const [modalOpen, setModalOpen] = useState(false)
   const [modalType, setModalType] = useState<'variable' | 'fixed'>('variable')
@@ -378,6 +382,31 @@ export function ExpensesPage() {
     }
   }
 
+  // Marcar/desmarcar todas as despesas fixas do mes de uma vez
+  const handleToggleAllPaid = async (markAsPaid: boolean) => {
+    const targets = fixedExpenses.filter(e => (e.payments && e.payments.length > 0) !== markAsPaid)
+    if (targets.length === 0) return
+    setBulkPaying(true)
+    try {
+      await Promise.all(targets.map(expense =>
+        markAsPaid
+          ? fetch(`/api/expenses/fixed/${expense.id}/pay`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ month: currentMonth, year: currentYear }),
+            })
+          : fetch(`/api/expenses/fixed/${expense.id}/pay?month=${currentMonth}&year=${currentYear}`, {
+              method: 'DELETE',
+            })
+      ))
+      fetchAll()
+    } catch (error) {
+      console.error('Erro ao atualizar pagamentos:', error)
+    } finally {
+      setBulkPaying(false)
+    }
+  }
+
   // Quick expense: inline save (today's date, no modal)
   const handleQuickSave = async () => {
     if (!quickAmount || Number(quickAmount) <= 0 || !selectedAccountId) return
@@ -694,6 +723,19 @@ export function ExpensesPage() {
   const variableTotal = variableExpenses.reduce((a, b) => a + b.amount, 0)
   const pbTotal = pbContributions.reduce((a, b) => a + b.amount, 0)
 
+  // Checklist de despesas fixas: controle do que ja foi pago no mes
+  const isExpensePaid = (e: FixedExpense) => !!e.payments && e.payments.length > 0
+  const paidExpenses = fixedExpenses.filter(isExpensePaid)
+  const pendingExpenses = fixedExpenses.filter(e => !isExpensePaid(e))
+  const paidTotal = paidExpenses.reduce((a, b) => a + Number(b.amount), 0)
+  const pendingTotal = pendingExpenses.reduce((a, b) => a + Number(b.amount), 0)
+  const paidPercentage = fixedExpenses.length > 0
+    ? Math.round((paidExpenses.length / fixedExpenses.length) * 100)
+    : 0
+  const visibleFixedExpenses = fixedExpenses
+    .filter(e => fixedFilter === 'all' || (fixedFilter === 'paid' ? isExpensePaid(e) : !isExpensePaid(e)))
+    .sort((a, b) => Number(isExpensePaid(a)) - Number(isExpensePaid(b)))
+
   // Get unique recent expenses for quick re-launch (last 5 unique descriptions)
   const recentExpenses = variableExpenses
     .filter(e => e.description)
@@ -924,13 +966,57 @@ export function ExpensesPage() {
             {/* Fixed expenses */}
             <TabsContent value="fixed">
               <Card>
-                <CardHeader className="pb-3">
+                <CardHeader className="pb-3 space-y-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base sm:text-lg">Despesas Fixas</CardTitle>
                     <Button variant="ghost" size="sm" onClick={() => openCreateModal('fixed')} className="gap-1 text-xs">
                       <Plus className="h-3 w-3" /> Adicionar
                     </Button>
                   </div>
+
+                  {/* Checklist do mes: controle do que ja foi pago */}
+                  {fixedExpenses.length > 0 && (
+                    <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-xs sm:text-sm font-medium">
+                          {paidExpenses.length} de {fixedExpenses.length} pagas
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          Pago {formatCurrency(paidTotal)} - Falta {formatCurrency(pendingTotal)}
+                        </span>
+                      </div>
+                      <Progress value={paidPercentage} className="h-2" indicatorClassName="bg-success" />
+                      <div className="flex items-center justify-between gap-2 flex-wrap pt-1">
+                        <div className="flex gap-1">
+                          {([
+                            ['all', `Todas (${fixedExpenses.length})`],
+                            ['pending', `Pendentes (${pendingExpenses.length})`],
+                            ['paid', `Pagas (${paidExpenses.length})`],
+                          ] as const).map(([value, label]) => (
+                            <Button
+                              key={value}
+                              variant={fixedFilter === value ? 'default' : 'outline'}
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => setFixedFilter(value)}
+                            >
+                              {label}
+                            </Button>
+                          ))}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs gap-1"
+                          disabled={bulkPaying}
+                          onClick={() => handleToggleAllPaid(pendingExpenses.length > 0)}
+                        >
+                          <Check className="h-3 w-3" />
+                          {pendingExpenses.length > 0 ? 'Marcar todas' : 'Desmarcar todas'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </CardHeader>
                 <CardContent>
                   {loading ? (
@@ -939,10 +1025,28 @@ export function ExpensesPage() {
                     <p className="text-sm text-muted-foreground text-center py-6">Nenhuma despesa fixa cadastrada</p>
                   ) : (
                     <div className="space-y-2">
-                      {fixedExpenses.map(expense => {
-                        const isPaid = expense.payments && expense.payments.length > 0
+                      {fixedExpenses.length > 0 && visibleFixedExpenses.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-6">
+                          {fixedFilter === 'pending' ? 'Todas as despesas fixas ja foram pagas' : 'Nenhuma despesa paga ainda'}
+                        </p>
+                      )}
+                      {visibleFixedExpenses.map(expense => {
+                        const isPaid = isExpensePaid(expense)
                         return (
                           <div key={expense.id} className={`flex items-center justify-between p-3 rounded-lg border hover:bg-accent/50 transition-colors ${isPaid ? 'opacity-60' : ''}`}>
+                            <button
+                              type="button"
+                              onClick={() => handleTogglePaid(expense)}
+                              aria-label={isPaid ? 'Desmarcar pagamento' : 'Marcar como pago'}
+                              title={isPaid ? 'Desmarcar pagamento' : 'Marcar como pago'}
+                              className={`mr-3 shrink-0 h-5 w-5 rounded border flex items-center justify-center transition-colors ${
+                                isPaid
+                                  ? 'bg-success border-success text-success-foreground'
+                                  : 'border-muted-foreground/40 hover:border-primary'
+                              }`}
+                            >
+                              {isPaid && <Check className="h-3.5 w-3.5" />}
+                            </button>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <p className={`font-semibold text-sm sm:text-base ${isPaid ? 'line-through text-muted-foreground' : 'text-destructive'}`}>{formatCurrency(Number(expense.amount))}</p>
@@ -971,15 +1075,6 @@ export function ExpensesPage() {
                               </p>
                             </div>
                             <div className="flex gap-1 shrink-0 ml-2">
-                              <Button
-                                variant={isPaid ? 'default' : 'outline'}
-                                size="icon"
-                                className={`h-8 w-8 ${isPaid ? 'bg-success hover:bg-success/80 text-success-foreground' : ''}`}
-                                onClick={() => handleTogglePaid(expense)}
-                                title={isPaid ? 'Desmarcar pagamento' : 'Marcar como pago'}
-                              >
-                                <Check className="h-3.5 w-3.5" />
-                              </Button>
                               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditModal('fixed', expense)}>
                                 <Pencil className="h-3.5 w-3.5" />
                               </Button>
